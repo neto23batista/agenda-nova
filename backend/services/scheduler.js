@@ -1,82 +1,35 @@
-// services/scheduler.js — Agendador automático de lembretes com node-cron
-const cron = require("node-cron");
-const { getDb } = require("../database/setup");
+const cron  = require("node-cron");
+const { db } = require("../database/setup");
 const { sendDayReminder } = require("./notificationService");
 
-let schedulerStarted = false;
-
-function todayStr() {
-  return new Date().toISOString().split("T")[0];
-}
-
-// ── Job: envia lembretes automáticos para todos os agendamentos de hoje ──
+let started = false;
+const today = () => new Date().toISOString().split("T")[0];
 
 async function runDailyReminders() {
-  const db   = getDb();
-  const today = todayStr();
+  const t = today();
+  console.log(`\n[SCHEDULER] ⏰ Disparando lembretes — ${t}`);
 
-  console.log(`\n[SCHEDULER] ⏰ Disparando lembretes automáticos — ${today}`);
+  const sentIds = db.get("notifications")
+    .filter(n => n.type === "reminder" && n.created_at >= t)
+    .map("appointment_id").value();
 
-  const appointments = db.prepare(`
-    SELECT a.id, u.name AS client_name
-    FROM appointments a
-    JOIN users u ON u.id = a.client_id
-    WHERE a.date = ?
-      AND a.status IN ('confirmed', 'pending')
-      AND a.id NOT IN (
-        SELECT DISTINCT appointment_id FROM notifications
-        WHERE type = 'reminder'
-          AND created_at >= date('now', 'start of day')
-          AND appointment_id IS NOT NULL
-      )
-  `).all(today);
+  const appts = db.get("appointments")
+    .filter(a => a.date === t && ["confirmed","pending"].includes(a.status) && !sentIds.includes(a.id))
+    .value();
 
-  if (appointments.length === 0) {
-    console.log(`[SCHEDULER] Nenhum agendamento sem lembrete hoje.`);
-    return;
+  if (!appts.length) { console.log("[SCHEDULER] Nenhum agendamento pendente."); return; }
+  for (const a of appts) {
+    try { await sendDayReminder(a.id); } catch (e) { console.error("[SCHEDULER] Erro:", e.message); }
   }
-
-  console.log(`[SCHEDULER] Enviando ${appointments.length} lembrete(s)...`);
-
-  for (const appt of appointments) {
-    try {
-      await sendDayReminder(appt.id);
-    } catch (err) {
-      console.error(`[SCHEDULER] ❌ Erro ao enviar lembrete para ${appt.client_name}:`, err.message);
-    }
-  }
-
-  console.log(`[SCHEDULER] ✅ Lembretes concluídos.\n`);
+  console.log(`[SCHEDULER] ✅ ${appts.length} lembrete(s) enviados.\n`);
 }
-
-// ── Job: limpeza de notificações antigas (> 30 dias) ─────────
-
-function runCleanup() {
-  const db = getDb();
-  const deleted = db.prepare(`
-    DELETE FROM notifications WHERE created_at < datetime('now', '-30 days')
-  `).run();
-  if (deleted.changes > 0) {
-    console.log(`[SCHEDULER] 🧹 Limpeza: ${deleted.changes} notificações antigas removidas`);
-  }
-}
-
-// ── Inicializar scheduler ─────────────────────────────────────
 
 function startScheduler() {
-  if (schedulerStarted) return;
-  schedulerStarted = true;
-
-  const reminderCron  = process.env.REMINDER_CRON || "0 8 * * *";
-  const cleanupCron   = "0 3 * * 0"; // Domingo às 3h
-
-  // Lembrete diário
-  cron.schedule(reminderCron, runDailyReminders, { timezone: "America/Sao_Paulo" });
-  console.log(`[SCHEDULER] ✅ Lembrete diário agendado: "${reminderCron}" (America/Sao_Paulo)`);
-
-  // Limpeza semanal
-  cron.schedule(cleanupCron, runCleanup, { timezone: "America/Sao_Paulo" });
-  console.log(`[SCHEDULER] ✅ Limpeza semanal agendada: "${cleanupCron}"`);
+  if (started) return;
+  started = true;
+  const expr = process.env.REMINDER_CRON || "0 8 * * *";
+  cron.schedule(expr, runDailyReminders, { timezone: "America/Sao_Paulo" });
+  console.log(`[SCHEDULER] ✅ Lembretes agendados: "${expr}" (America/Sao_Paulo)`);
 }
 
 module.exports = { startScheduler, runDailyReminders };
