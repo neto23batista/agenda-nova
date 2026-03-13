@@ -1,0 +1,1495 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Belle Studio — Sistema de Agendamentos</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        /* ── Reset & base ─────────────────────────────────────────── */
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0
+        }
+
+        html,
+        body,
+        #root {
+            height: 100%
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Helvetica, sans-serif;
+            background: #f5f4f0;
+            color: #1a1a1a;
+            font-size: 14px;
+            line-height: 1.55;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        button,
+        input,
+        select,
+        textarea {
+            font-family: inherit;
+            font-size: 14px
+        }
+
+        button {
+            cursor: pointer
+        }
+
+        a {
+            color: inherit;
+            text-decoration: none
+        }
+
+        /* ── CSS Variables ──────────────────────────────────────────── */
+        :root {
+            --brand: #e11d78;
+            --brand-dark: #be185d;
+            --brand-xlight: #fff0f6;
+            --brand-light: #fce7f3;
+            --ink: #1a1a1a;
+            --ink-2: #3f3f46;
+            --ink-3: #71717a;
+            --ink-4: #a1a1aa;
+            --border: #e4e4e7;
+            --border-2: #d4d4d8;
+            --surface: #ffffff;
+            --surface-2: #fafafa;
+            --bg: #f5f4f0;
+            --sidebar: #111117;
+            --sidebar-2: #1c1c22;
+            --sidebar-3: #28282f;
+            --green: #059669;
+            --green-bg: #ecfdf5;
+            --green-border: #a7f3d0;
+            --amber: #c47a00;
+            --amber-bg: #fffbeb;
+            --amber-border: #fde68a;
+            --red: #dc2626;
+            --red-bg: #fef2f2;
+            --red-border: #fecaca;
+            --purple: #7c3aed;
+            --purple-bg: #f5f3ff;
+            --purple-border: #c4b5fd;
+            --r: 10px;
+            --r-lg: 14px;
+            --r-xl: 18px;
+            --sh: 0 1px 2px rgba(0, 0, 0, .05);
+            --sh-md: 0 4px 12px rgba(0, 0, 0, .08);
+            --sh-lg: 0 12px 32px rgba(0, 0, 0, .12);
+        }
+
+        /* ── Scrollbar ──────────────────────────────────────────────── */
+        ::-webkit-scrollbar {
+            width: 5px;
+            height: 5px
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-2);
+            border-radius: 4px
+        }
+
+        /* ── Animations ─────────────────────────────────────────────── */
+        @keyframes fadeUp {
+            from {
+                opacity: 0;
+                transform: translateY(10px)
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0)
+            }
+        }
+
+        @keyframes slideInRight {
+            from {
+                opacity: 0;
+                transform: translateX(16px)
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(0)
+            }
+        }
+
+        @keyframes toastIn {
+            from {
+                opacity: 0;
+                transform: translateX(110%)
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(0)
+            }
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg)
+            }
+        }
+
+        @keyframes shimmer {
+            to {
+                background-position: -200% 0
+            }
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1
+            }
+
+            50% {
+                opacity: .4
+            }
+        }
+
+        .anim-fade {
+            animation: fadeUp .28s ease both
+        }
+
+        .anim-slide {
+            animation: slideInRight .25s ease both
+        }
+
+        .spin {
+            animation: spin .7s linear infinite
+        }
+
+        /* ── Layout ─────────────────────────────────────────────────── */
+        .layout {
+            display: flex;
+            height: 100vh;
+            overflow: hidden
+        }
+
+        .sidebar {
+            width: 230px;
+            background: var(--sidebar);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+            overflow-y: auto
+        }
+
+        .main {
+            flex: 1;
+            overflow-y: auto;
+            background: var(--bg)
+        }
+
+        .page {
+            padding: 32px 36px;
+            max-width: 900px
+        }
+
+        /* ── Cards ──────────────────────────────────────────────────── */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-lg);
+            padding: 20px 24px;
+            box-shadow: var(--sh)
+        }
+
+        .card-hover {
+            transition: box-shadow .15s, transform .15s
+        }
+
+        .card-hover:hover {
+            box-shadow: var(--sh-md);
+            transform: translateY(-1px)
+        }
+
+        /* ── Form elements ──────────────────────────────────────────── */
+        .field {
+            width: 100%;
+            padding: 9px 13px;
+            border: 1.5px solid var(--border);
+            border-radius: var(--r);
+            color: var(--ink);
+            background: var(--surface);
+            outline: none;
+            transition: border-color .15s, box-shadow .15s
+        }
+
+        .field:focus {
+            border-color: var(--brand);
+            box-shadow: 0 0 0 3px rgba(225, 29, 120, .12)
+        }
+
+        .field::placeholder {
+            color: var(--ink-4)
+        }
+
+        select.field {
+            cursor: pointer
+        }
+
+        /* ── Skeleton ────────────────────────────────────────────────── */
+        .skel {
+            background: linear-gradient(90deg, var(--border) 25%, var(--surface-2) 50%, var(--border) 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+            border-radius: var(--r)
+        }
+
+        /* ── Responsive ─────────────────────────────────────────────── */
+        @media(max-width:640px) {
+            .sidebar {
+                display: none
+            }
+
+            .page {
+                padding: 20px 16px
+            }
+
+            .desktop-only {
+                display: none
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        "use strict";
+        const { useState, useEffect, useCallback, useRef, useMemo } = React;
+
+        /* ═══════════════════════════════════════════════════════════════
+           BACKEND / API LAYER
+           Abstrai o localStorage como se fosse uma API REST.
+           Trocar por fetch() real quando houver servidor.
+        ═══════════════════════════════════════════════════════════════ */
+
+        const uid = () => ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, c => (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16));
+        const todayStr = () => new Date().toISOString().split('T')[0];
+        const isoNow = () => new Date().toISOString();
+        const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+        // ── Seed data ─────────────────────────────────────────────────
+        const SEED_SERVICES = [
+            { id: 's1', name: 'Manicure Simples', icon: '🌸', duration: 40, price: 45, active: true },
+            { id: 's2', name: 'Pedicure Completa', icon: '🦶', duration: 50, price: 60, active: true },
+            { id: 's3', name: 'Gel Alongado', icon: '💅', duration: 90, price: 120, active: true },
+            { id: 's4', name: 'Esmaltação em Gel', icon: '✨', duration: 60, price: 80, active: true },
+            { id: 's5', name: 'Combo Mani + Pedi', icon: '👑', duration: 90, price: 95, active: true },
+        ];
+        const TIME_SLOTS = [
+            '08:00', '08:30', '09:00', '09:30', '10:00', '10:30',
+            '11:00', '11:30', '13:00', '13:30', '14:00', '14:30',
+            '15:00', '15:30', '16:00', '16:30', '17:00', '17:30', '18:00',
+        ];
+
+        // ── LocalStorage driver ────────────────────────────────────────
+        const Store = {
+            get: (k) => { try { return JSON.parse(localStorage.getItem(k)) } catch { return null } },
+            set: (k, v) => { localStorage.setItem(k, JSON.stringify(v)); return v },
+            del: (k) => { localStorage.removeItem(k) },
+            keys: (prefix = '') => Object.keys(localStorage).filter(k => k.startsWith(prefix)),
+            all: (prefix) => Store.keys(prefix).map(k => Store.get(k)).filter(Boolean),
+        };
+
+        // ── API functions (simulating REST) ───────────────────────────
+        const API = {
+            async _delay(ms = 80) { await sleep(ms) },
+
+            async init() {
+                if (Store.get('__belle_init__')) return;
+                Store.set('belle_services', SEED_SERVICES);
+                const appts = [
+                    { id: uid(), clientId: 'demo-c1', clientName: 'Maria Oliveira', serviceId: 's1', date: todayStr(), time: '09:00', status: 'confirmed', notes: '', createdAt: isoNow() },
+                    { id: uid(), clientId: 'demo-c2', clientName: 'Fernanda Lima', serviceId: 's4', date: todayStr(), time: '11:00', status: 'pending', notes: '', createdAt: isoNow() },
+                    { id: uid(), clientId: 'demo-c3', clientName: 'Juliana Souza', serviceId: 's2', date: todayStr(), time: '14:30', status: 'confirmed', notes: '', createdAt: isoNow() },
+                ];
+                appts.forEach(a => Store.set('belle_appt_' + a.id, a));
+                Store.set('__belle_init__', 1);
+            },
+
+            // GET /api/appointments
+            async getAppointments(filters = {}) {
+                await this._delay(90);
+                let list = Store.all('belle_appt_');
+                list.sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+                if (filters.clientId) list = list.filter(a => a.clientId === filters.clientId);
+                if (filters.date) list = list.filter(a => a.date === filters.date);
+                if (filters.status) list = list.filter(a => a.status === filters.status);
+                return list;
+            },
+
+            // POST /api/appointments
+            async createAppointment(data) {
+                await this._delay(130);
+                const appt = { ...data, id: uid(), createdAt: isoNow() };
+                Store.set('belle_appt_' + appt.id, appt);
+                return appt;
+            },
+
+            // PATCH /api/appointments/:id
+            async updateAppointment(id, patch) {
+                await this._delay(100);
+                const appt = Store.get('belle_appt_' + id);
+                if (!appt) throw new Error('Agendamento não encontrado');
+                const updated = { ...appt, ...patch, updatedAt: isoNow() };
+                Store.set('belle_appt_' + id, updated);
+                return updated;
+            },
+
+            // GET /api/services
+            async getServices() {
+                await this._delay(60);
+                return Store.get('belle_services') || SEED_SERVICES;
+            },
+
+            // PATCH /api/services/:id
+            async updateService(id, patch) {
+                await this._delay(80);
+                const svcs = Store.get('belle_services') || SEED_SERVICES;
+                const updated = svcs.map(s => s.id === id ? { ...s, ...patch } : s);
+                Store.set('belle_services', updated);
+                return updated;
+            },
+        };
+
+        /* ═══════════════════════════════════════════════════════════════
+           UTILITÁRIOS
+        ═══════════════════════════════════════════════════════════════ */
+
+        const WEEK = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+        const MON = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+        const fmtDate = (d) => { if (!d) return ''; const [, m, day] = d.split('-'); return `${+day} ${MON[+m - 1]}` };
+        const fmtDay = (d) => WEEK[new Date(d + 'T12:00:00').getDay()] || '';
+        const fmtFull = (d, t) => `${fmtDay(d)}, ${fmtDate(d)} às ${t}`;
+        const fmtR = (v) => `R$ ${Number(v).toFixed(0)}`;
+
+        const STATUS = {
+            pending: { label: 'Pendente', color: '#b45309', bg: '#fffbeb', bd: '#fde68a' },
+            confirmed: { label: 'Confirmado', color: '#047857', bg: '#ecfdf5', bd: '#6ee7b7' },
+            done: { label: 'Concluído', color: '#5b21b6', bg: '#f5f3ff', bd: '#c4b5fd' },
+            cancelled: { label: 'Cancelado', color: '#b91c1c', bg: '#fef2f2', bd: '#fecaca' },
+        };
+
+        /* ═══════════════════════════════════════════════════════════════
+           COMPONENTES UI BASE
+        ═══════════════════════════════════════════════════════════════ */
+
+        // Toast
+        function useToast() {
+            const [list, setList] = useState([]);
+            const add = useCallback((msg, type = 'ok') => {
+                const id = uid();
+                setList(l => [...l, { id, msg, type }]);
+                setTimeout(() => setList(l => l.filter(x => x.id !== id)), 3500);
+            }, []);
+            return { list, add };
+        }
+        function Toasts({ list }) {
+            const colors = { ok: '#059669', err: '#dc2626', warn: '#d97706', info: '#2563eb' };
+            return (
+                <div style={{ position: 'fixed', top: 18, right: 18, zIndex: 9999, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {list.map(t => (
+                        <div key={t.id} style={{
+                            display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px',
+                            background: '#111117', color: '#f4f4f5', borderRadius: 11,
+                            boxShadow: '0 8px 28px rgba(0,0,0,.35)', minWidth: 240, maxWidth: 340,
+                            animation: 'toastIn .3s ease', fontSize: 13, fontWeight: 500,
+                        }}>
+                            <span style={{ width: 8, height: 8, borderRadius: '50%', background: colors[t.type] || colors.ok, flexShrink: 0 }} />
+                            {t.msg}
+                        </div>
+                    ))}
+                </div>
+            );
+        }
+
+        // Button
+        function Btn({ children, onClick, v = 'primary', sz = 'md', loading, disabled, full, icon, style = {} }) {
+            const vs = {
+                primary: { background: 'linear-gradient(135deg,#e11d78,#be185d)', color: '#fff', border: 'none', shadow: '0 2px 8px rgba(225,29,120,.35)' },
+                ghost: { background: 'transparent', color: '#71717a', border: '1px solid #e4e4e7' },
+                danger: { background: 'transparent', color: '#dc2626', border: '1px solid #fecaca' },
+                success: { background: 'transparent', color: '#059669', border: '1px solid #6ee7b7' },
+                dark: { background: '#27272a', color: '#f4f4f5', border: 'none' },
+                outline: { background: 'transparent', color: '#e11d78', border: '1.5px solid #e11d78' },
+            };
+            const szs = {
+                xs: { padding: '4px 10px', fontSize: 11, borderRadius: 7 },
+                sm: { padding: '6px 13px', fontSize: 12, borderRadius: 8 },
+                md: { padding: '9px 18px', fontSize: 13, borderRadius: 9 },
+                lg: { padding: '12px 24px', fontSize: 14, borderRadius: 11 },
+            };
+            const s = vs[v] || vs.primary;
+            return (
+                <button onClick={onClick} disabled={disabled || loading} style={{
+                    ...s, ...szs[sz || 'md'],
+                    fontWeight: 600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    width: full ? '100%' : 'auto', transition: 'all .15s', whiteSpace: 'nowrap',
+                    opacity: disabled ? .5 : 1, cursor: disabled || loading ? 'not-allowed' : 'pointer',
+                    boxShadow: s.shadow || 'none', ...style,
+                }}
+                    onMouseEnter={e => { if (!disabled && !loading) e.currentTarget.style.opacity = '.88' }}
+                    onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+                    onMouseDown={e => { if (!disabled && !loading) e.currentTarget.style.transform = 'scale(.97)' }}
+                    onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
+                >
+                    {loading && <span style={{ width: 12, height: 12, border: '2px solid currentColor', borderTopColor: 'transparent', borderRadius: '50%', flexShrink: 0 }} className="spin" />}
+                    {icon && !loading && <span style={{ fontSize: 14 }}>{icon}</span>}
+                    {children}
+                </button>
+            );
+        }
+
+        // Badge de status
+        function Badge({ status }) {
+            const s = STATUS[status] || STATUS.pending;
+            return (
+                <span style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                    padding: '3px 9px', borderRadius: 20, fontSize: 11, fontWeight: 600,
+                    color: s.color, background: s.bg, border: `1px solid ${s.bd}`,
+                }}>
+                    <span style={{ width: 5, height: 5, borderRadius: '50%', background: s.color }} />
+                    {s.label}
+                </span>
+            );
+        }
+
+        // Spinner
+        function Spinner({ size = 24, color = '#e11d78' }) {
+            return <div style={{ width: size, height: size, border: `2.5px solid ${color}25`, borderTopColor: color, borderRadius: '50%' }} className="spin" />;
+        }
+
+        // Input/Select wrapper
+        function Field({ label, hint, error, children, style = {} }) {
+            return (
+                <div style={{ marginBottom: 16, ...style }}>
+                    {label && <label style={{ display: 'block', marginBottom: 5, fontSize: 12, fontWeight: 600, color: '#3f3f46', letterSpacing: '.01em' }}>{label}</label>}
+                    {children}
+                    {hint && <p style={{ marginTop: 4, fontSize: 11, color: '#a1a1aa' }}>{hint}</p>}
+                    {error && <p style={{ marginTop: 4, fontSize: 11, color: '#dc2626', fontWeight: 500 }}>{error}</p>}
+                </div>
+            );
+        }
+
+        // Modal
+        function Modal({ open, onClose, title, children, width = 460 }) {
+            useEffect(() => {
+                if (open) { document.body.style.overflow = 'hidden' }
+                else { document.body.style.overflow = '' }
+                return () => { document.body.style.overflow = '' };
+            }, [open]);
+            if (!open) return null;
+            return (
+                <div style={{
+                    position: 'fixed', inset: 0, background: 'rgba(10,10,14,.55)', zIndex: 500,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+                }} onClick={e => e.target === e.currentTarget && onClose()}>
+                    <div style={{
+                        background: '#fff', borderRadius: 18, width: '100%', maxWidth: width,
+                        maxHeight: '92vh', overflowY: 'auto', boxShadow: '0 24px 64px rgba(0,0,0,.25)',
+                        animation: 'fadeUp .22s ease',
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #f0f0f0' }}>
+                            <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1a1a1a' }}>{title}</h3>
+                            <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#a1a1aa', fontSize: 22, lineHeight: 1, padding: '0 2px', cursor: 'pointer' }}>×</button>
+                        </div>
+                        <div style={{ padding: '22px 24px' }}>{children}</div>
+                    </div>
+                </div>
+            );
+        }
+
+        // KPI Card
+        function KPI({ icon, label, value, color, trend }) {
+            return (
+                <div className="card" style={{ borderTop: `3px solid ${color}`, position: 'relative', overflow: 'hidden' }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                        <div>
+                            <p style={{ fontSize: 11, fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>{label}</p>
+                            <p style={{ fontSize: 24, fontWeight: 800, color: '#1a1a1a', letterSpacing: '-.5px' }}>{value}</p>
+                            {trend && <p style={{ fontSize: 11, color: '#71717a', marginTop: 4 }}>{trend}</p>}
+                        </div>
+                        <div style={{ fontSize: 22, opacity: .8 }}>{icon}</div>
+                    </div>
+                </div>
+            );
+        }
+
+        /* ═══════════════════════════════════════════════════════════════
+           LOGIN PAGE
+        ═══════════════════════════════════════════════════════════════ */
+
+        function LoginPage({ onLogin }) {
+            const [role, setRole] = useState('client');
+            const [name, setName] = useState('');
+            const [pwd, setPwd] = useState('');
+            const [loading, setLoading] = useState(false);
+            const [err, setErr] = useState('');
+
+            const submit = async () => {
+                setErr('');
+                if (role === 'client' && !name.trim()) { setErr('Informe seu nome.'); return }
+                if (role === 'owner' && pwd !== 'belle123') { setErr('Senha incorreta.'); return }
+                setLoading(true);
+                await sleep(450);
+                onLogin(role === 'owner'
+                    ? { role: 'owner', name: 'Proprietária' }
+                    : { role: 'client', name: name.trim(), id: uid() });
+                setLoading(false);
+            };
+
+            return (
+                <div style={{
+                    minHeight: '100vh', display: 'flex', flexDirection: 'column',
+                    alignItems: 'center', justifyContent: 'center',
+                    background: 'linear-gradient(145deg,#fdf0f6 0%,#f5f4f0 40%,#f0f4fd 100%)',
+                    padding: 24,
+                }}>
+                    {/* Blobs de fundo */}
+                    <div style={{ position: 'fixed', top: -120, right: -80, width: 360, height: 360, borderRadius: '50%', background: 'radial-gradient(circle,rgba(225,29,120,.08),transparent 70%)', pointerEvents: 'none' }} />
+                    <div style={{ position: 'fixed', bottom: -100, left: -60, width: 280, height: 280, borderRadius: '50%', background: 'radial-gradient(circle,rgba(124,58,237,.06),transparent 70%)', pointerEvents: 'none' }} />
+
+                    {/* Logo */}
+                    <div style={{ textAlign: 'center', marginBottom: 36 }} className="anim-fade">
+                        <div style={{
+                            width: 68, height: 68,
+                            background: 'linear-gradient(135deg,#e11d78 0%,#be185d 100%)',
+                            borderRadius: 20, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: 30, margin: '0 auto 14px',
+                            boxShadow: '0 8px 28px rgba(225,29,120,.35)',
+                        }}>💅</div>
+                        <h1 style={{ fontSize: 26, fontWeight: 800, color: '#1a1a1a', letterSpacing: '-.5px' }}>Belle Studio</h1>
+                        <p style={{ color: '#71717a', fontSize: 13, marginTop: 3 }}>Sistema de Agendamentos</p>
+                    </div>
+
+                    {/* Card */}
+                    <div style={{
+                        background: '#fff', borderRadius: 22, padding: '32px 30px',
+                        width: '100%', maxWidth: 390,
+                        boxShadow: '0 4px 32px rgba(0,0,0,.09),0 1px 4px rgba(0,0,0,.04)',
+                        border: '1px solid rgba(0,0,0,.04)',
+                    }} className="anim-fade">
+
+                        {/* Toggle */}
+                        <div style={{ display: 'flex', background: '#f4f4f5', borderRadius: 11, padding: 4, marginBottom: 26, gap: 4 }}>
+                            {[['client', '👩 Cliente'], ['owner', '👑 Proprietária']].map(([k, l]) => (
+                                <button key={k} onClick={() => { setRole(k); setErr('') }} style={{
+                                    flex: 1, padding: '9px 10px', border: 'none', borderRadius: 8,
+                                    background: role === k ? '#fff' : 'transparent',
+                                    color: role === k ? '#1a1a1a' : '#71717a',
+                                    fontWeight: role === k ? 700 : 500, fontSize: 13,
+                                    boxShadow: role === k ? '0 1px 4px rgba(0,0,0,.1)' : 'none',
+                                    transition: 'all .2s', cursor: 'pointer',
+                                }}>{l}</button>
+                            ))}
+                        </div>
+
+                        {role === 'client' ? (
+                            <div>
+                                <Field label="Seu nome completo">
+                                    <input className="field" value={name} onChange={e => setName(e.target.value)}
+                                        placeholder="Ex: Maria Oliveira"
+                                        onKeyDown={e => e.key === 'Enter' && submit()} />
+                                </Field>
+                                {err && <p style={{ marginBottom: 12, fontSize: 12, color: '#dc2626', fontWeight: 500 }}>{err}</p>}
+                                <Btn onClick={submit} loading={loading} full sz="lg">Entrar no sistema →</Btn>
+                                <p style={{ textAlign: 'center', color: '#a1a1aa', fontSize: 12, marginTop: 14 }}>Sem cadastro · 100% gratuito ✨</p>
+                            </div>
+                        ) : (
+                            <div>
+                                <Field label="Senha de acesso">
+                                    <input className="field" type="password" value={pwd} onChange={e => setPwd(e.target.value)}
+                                        placeholder="••••••••"
+                                        onKeyDown={e => e.key === 'Enter' && submit()} />
+                                </Field>
+                                {err && <p style={{ marginBottom: 12, fontSize: 12, color: '#dc2626', fontWeight: 500 }}>{err}</p>}
+                                <Btn onClick={submit} loading={loading} full sz="lg">Acessar Painel →</Btn>
+                                <p style={{ textAlign: 'center', color: '#a1a1aa', fontSize: 12, marginTop: 14 }}>Demo: <code style={{ background: '#f4f4f5', padding: '1px 6px', borderRadius: 4 }}>belle123</code></p>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Footer */}
+                    <p style={{ marginTop: 28, color: '#c4c4c8', fontSize: 11 }}>Belle Studio · Sistema de Agendamentos v2.0</p>
+                </div>
+            );
+        }
+
+        /* ═══════════════════════════════════════════════════════════════
+           PORTAL DA PROPRIETÁRIA
+        ═══════════════════════════════════════════════════════════════ */
+
+        function OwnerPortal({ onLogout }) {
+            const [tab, setTab] = useState('hoje');
+            const [appts, setAppts] = useState([]);
+            const [services, setSvcs] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const { list: toasts, add: toast } = useToast();
+            const pollRef = useRef();
+            const today = todayStr();
+
+            const load = useCallback(async () => {
+                try {
+                    const [a, s] = await Promise.all([API.getAppointments(), API.getServices()]);
+                    setAppts(a); setSvcs(s);
+                } catch { toast('Erro ao carregar dados', 'err') }
+                finally { setLoading(false) }
+            }, []);
+
+            useEffect(() => {
+                load();
+                pollRef.current = setInterval(load, 6000); // sincroniza a cada 6s
+                return () => clearInterval(pollRef.current);
+            }, [load]);
+
+            const updateStatus = async (id, status) => {
+                try {
+                    await API.updateAppointment(id, { status });
+                    setAppts(p => p.map(a => a.id === id ? { ...a, status } : a));
+                    const msgs = { confirmed: 'Confirmado com sucesso ✅', done: 'Serviço concluído 🎉', cancelled: 'Agendamento cancelado' };
+                    toast(msgs[status] || 'Atualizado', status === 'cancelled' ? 'err' : 'ok');
+                } catch (e) { toast(e.message, 'err') }
+            };
+
+            const addAppt = async (data) => {
+                try {
+                    const a = await API.createAppointment({ ...data, status: 'confirmed' });
+                    setAppts(p => [...p, a]);
+                    toast('Agendamento adicionado! ✅');
+                } catch (e) { toast(e.message, 'err') }
+            };
+
+            const getSvc = id => services.find(s => s.id === id) || {};
+            const pending = appts.filter(a => a.status === 'pending');
+            const todayAppts = appts.filter(a => a.date === today);
+            const monthRev = appts
+                .filter(a => a.date.slice(0, 7) === today.slice(0, 7) && a.status !== 'cancelled')
+                .reduce((s, a) => s + (getSvc(a.serviceId).price || 0), 0);
+
+            const NAV = [
+                { id: 'hoje', label: 'Hoje', icon: '◈' },
+                { id: 'agenda', label: 'Agenda', icon: '▦' },
+                { id: 'pendentes', label: 'Pendentes', icon: '◎', badge: pending.length },
+                { id: 'servicos', label: 'Serviços', icon: '◆' },
+            ];
+
+            return (
+                <div className="layout">
+                    <Toasts list={toasts} />
+
+                    {/* ── Sidebar ─────────────────────────────────────────── */}
+                    <aside className="sidebar">
+                        {/* Logo */}
+                        <div style={{ padding: '22px 18px 18px', borderBottom: '1px solid #1c1c22' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <div style={{
+                                    width: 36, height: 36, borderRadius: 10,
+                                    background: 'linear-gradient(135deg,#e11d78,#be185d)',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16,
+                                    boxShadow: '0 4px 12px rgba(225,29,120,.4)',
+                                }}>💅</div>
+                                <div>
+                                    <p style={{ color: '#f4f4f5', fontWeight: 700, fontSize: 14, letterSpacing: '-.2px' }}>Belle Studio</p>
+                                    <p style={{ color: '#52525b', fontSize: 10, fontWeight: 500 }}>Painel · Proprietária</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Nav */}
+                        <nav style={{ padding: '14px 10px', flex: 1 }}>
+                            <p style={{ color: '#3f3f46', fontSize: 9, fontWeight: 700, letterSpacing: '.1em', padding: '0 8px 8px', textTransform: 'uppercase' }}>Navegação</p>
+                            {NAV.map(n => (
+                                <button key={n.id} onClick={() => setTab(n.id)} style={{
+                                    width: '100%', display: 'flex', alignItems: 'center', gap: 9,
+                                    padding: '10px 12px', borderRadius: 9, border: 'none',
+                                    background: tab === n.id ? '#1c1c22' : 'transparent',
+                                    color: tab === n.id ? '#fff' : '#71717a',
+                                    fontWeight: tab === n.id ? 600 : 400, fontSize: 13,
+                                    marginBottom: 2, cursor: 'pointer', textAlign: 'left',
+                                    transition: 'all .15s',
+                                }}>
+                                    <span style={{ fontSize: 14, opacity: .8 }}>{n.icon}</span>
+                                    {n.label}
+                                    {n.badge > 0 && <span style={{
+                                        marginLeft: 'auto', background: '#e11d78', color: '#fff',
+                                        fontSize: 9, fontWeight: 700, padding: '1px 7px', borderRadius: 20, minWidth: 18, textAlign: 'center',
+                                    }}>{n.badge}</span>}
+                                </button>
+                            ))}
+                        </nav>
+
+                        {/* Resumo */}
+                        <div style={{ padding: '14px 10px', borderTop: '1px solid #1c1c22' }}>
+                            <p style={{ color: '#3f3f46', fontSize: 9, fontWeight: 700, letterSpacing: '.1em', padding: '0 8px 8px', textTransform: 'uppercase' }}>Mês atual</p>
+                            <div style={{ padding: '0 8px' }}>
+                                <p style={{ color: '#52525b', fontSize: 11, marginBottom: 2 }}>Agendamentos</p>
+                                <p style={{ color: '#e4e4e7', fontWeight: 700, fontSize: 18, letterSpacing: '-.3px', marginBottom: 10 }}>
+                                    {appts.filter(a => a.date.slice(0, 7) === today.slice(0, 7) && a.status !== 'cancelled').length}
+                                </p>
+                                <p style={{ color: '#52525b', fontSize: 11, marginBottom: 2 }}>Faturamento</p>
+                                <p style={{ color: '#e11d78', fontWeight: 700, fontSize: 18, letterSpacing: '-.3px' }}>{fmtR(monthRev)}</p>
+                            </div>
+                        </div>
+
+                        {/* Sair */}
+                        <div style={{ padding: '12px 10px', borderTop: '1px solid #1c1c22' }}>
+                            <button onClick={onLogout} style={{
+                                width: '100%', padding: '9px', borderRadius: 8,
+                                background: 'transparent', border: '1px solid #27272a',
+                                color: '#52525b', fontSize: 12, cursor: 'pointer', fontWeight: 500,
+                                transition: 'all .15s',
+                            }}>← Sair</button>
+                        </div>
+                    </aside>
+
+                    {/* ── Conteúdo principal ──────────────────────────────── */}
+                    <main className="main">
+                        {loading ? (
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 14 }}>
+                                <Spinner size={36} />
+                                <span style={{ color: '#71717a', fontSize: 14 }}>Carregando dados...</span>
+                            </div>
+                        ) : (
+                            <div className="page anim-fade">
+                                {tab === 'hoje' && <TodayTab appts={todayAppts} allAppts={appts} services={services} getSvc={getSvc} onUpdate={updateStatus} onAdd={addAppt} />}
+                                {tab === 'agenda' && <AgendaTab appts={appts} getSvc={getSvc} onUpdate={updateStatus} />}
+                                {tab === 'pendentes' && <PendingTab appts={pending} getSvc={getSvc} onUpdate={updateStatus} />}
+                                {tab === 'servicos' && <ServicesTab services={services} setSvcs={setSvcs} toast={toast} />}
+                            </div>
+                        )}
+                    </main>
+                </div>
+            );
+        }
+
+        /* ── ApptCard (dono) ──────────────────────────────────────── */
+        function ApptCard({ a, getSvc, onConfirm, onCancel, onDone, showDate, compact }) {
+            const svc = getSvc(a.serviceId);
+            return (
+                <div className="card card-hover" style={{ marginBottom: 10, transition: 'all .15s' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                        {/* Ícone */}
+                        <div style={{
+                            width: 48, height: 48, borderRadius: 12,
+                            background: 'linear-gradient(135deg,#fdf0f6,#fff0f6)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: 22, flexShrink: 0, border: '1px solid #fce7f3',
+                        }}>{svc.icon || '💅'}</div>
+
+                        {/* Info */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
+                                <span style={{ fontWeight: 700, fontSize: 14, color: '#1a1a1a' }}>{a.clientName}</span>
+                                <Badge status={a.status} />
+                            </div>
+                            <p style={{ fontSize: 12, color: '#71717a', lineHeight: 1.4 }}>
+                                {svc.name}
+                                {svc.price ? ' · ' + fmtR(svc.price) : ''}
+                                {compact ? ' · ' + a.time : (showDate ? ' · ' + fmtFull(a.date, a.time) : ' · ' + a.time + ' · ' + (svc.duration || '') + 'min')}
+                            </p>
+                        </div>
+
+                        {/* Ações */}
+                        {(a.status === 'pending' || a.status === 'confirmed') && (
+                            <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                                {a.status === 'pending' && onConfirm && <Btn v="success" sz="sm" onClick={() => onConfirm(a.id)}>✓ Confirmar</Btn>}
+                                {a.status === 'confirmed' && onDone && <Btn v="ghost" sz="sm" onClick={() => onDone(a.id)}>Concluir</Btn>}
+                                {onCancel && <Btn v="danger" sz="sm" onClick={() => onCancel(a.id)}>✕</Btn>}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        /* ── Tab: Hoje ───────────────────────────────────────────── */
+        function TodayTab({ appts, allAppts, services, getSvc, onUpdate, onAdd }) {
+            const [modal, setModal] = useState(false);
+            const [form, setForm] = useState({ clientName: '', serviceId: 's1', date: todayStr(), time: '' });
+            const [saving, setSaving] = useState(false);
+            const today = todayStr();
+
+            const takenTimes = allAppts.filter(a => a.date === form.date && a.status !== 'cancelled').map(a => a.time);
+            const avail = TIME_SLOTS.filter(t => !takenTimes.includes(t));
+
+            const save = async () => {
+                if (!form.clientName.trim()) { alert('Informe o nome da cliente.'); return }
+                if (!form.time) { alert('Selecione um horário.'); return }
+                setSaving(true);
+                await onAdd({ ...form, clientId: 'manual-' + uid() });
+                setSaving(false);
+                setModal(false);
+                setForm({ clientName: '', serviceId: 's1', date: todayStr(), time: '' });
+            };
+
+            const active = appts.filter(a => a.status !== 'cancelled' && a.status !== 'done').sort((a, b) => a.time.localeCompare(b.time));
+            const done = appts.filter(a => a.status === 'cancelled' || a.status === 'done').sort((a, b) => a.time.localeCompare(b.time));
+            const now = new Date();
+            const nowT = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+            // Progresso do dia
+            const total = active.length + done.length;
+            const progress = total > 0 ? Math.round((done.length / total) * 100) : 0;
+
+            return (
+                <div>
+                    {/* Header */}
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, gap: 16, flexWrap: 'wrap' }}>
+                        <div>
+                            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1a1a1a', letterSpacing: '-.4px' }}>Agenda de Hoje</h1>
+                            <p style={{ color: '#71717a', fontSize: 13, marginTop: 2 }}>
+                                {fmtDay(today)}, {fmtDate(today)} · {active.length} agendamento{active.length !== 1 ? 's' : ''}
+                            </p>
+                        </div>
+                        <Btn onClick={() => setModal(true)} icon="+" sz="md">Novo Agendamento</Btn>
+                    </div>
+
+                    {/* Barra de progresso do dia */}
+                    {total > 0 && (
+                        <div className="card" style={{ marginBottom: 20, padding: '16px 20px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                                <span style={{ fontSize: 12, fontWeight: 600, color: '#71717a' }}>Progresso do dia</span>
+                                <span style={{ fontSize: 12, fontWeight: 700, color: '#1a1a1a' }}>{done.length}/{total} concluídos</span>
+                            </div>
+                            <div style={{ height: 6, background: '#f0f0f0', borderRadius: 6, overflow: 'hidden' }}>
+                                <div style={{ height: '100%', width: `${progress}%`, background: 'linear-gradient(90deg,#e11d78,#be185d)', borderRadius: 6, transition: 'width .5s ease' }} />
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Timeline */}
+                    {active.length === 0 && done.length === 0 ? (
+                        <div className="card" style={{ textAlign: 'center', padding: '56px 24px' }}>
+                            <div style={{ fontSize: 44, marginBottom: 12 }}>🌸</div>
+                            <p style={{ fontWeight: 700, fontSize: 15, color: '#1a1a1a', marginBottom: 4 }}>Sem agendamentos hoje</p>
+                            <p style={{ color: '#a1a1aa', fontSize: 13 }}>Adicione o primeiro usando o botão acima</p>
+                        </div>
+                    ) : (
+                        <div>
+                            {active.map(a => {
+                                const past = a.time < nowT && a.status === 'confirmed';
+                                return (
+                                    <div key={a.id} style={{ display: 'flex', gap: 12, marginBottom: 8 }}>
+                                        {/* Linha do tempo */}
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 14, width: 52, flexShrink: 0 }}>
+                                            <span style={{ fontSize: 11, fontWeight: 700, color: past ? '#a1a1aa' : '#1a1a1a', letterSpacing: '-.3px' }}>{a.time}</span>
+                                            <div style={{ flex: 1, width: 1.5, background: past ? '#e4e4e7' : '#fce7f3', marginTop: 6, borderRadius: 1 }} />
+                                        </div>
+                                        <div style={{ flex: 1 }}>
+                                            <ApptCard a={a} getSvc={getSvc} compact
+                                                onConfirm={a.status === 'pending' ? id => onUpdate(id, 'confirmed') : null}
+                                                onCancel={id => onUpdate(id, 'cancelled')}
+                                                onDone={a.status === 'confirmed' ? id => onUpdate(id, 'done') : null} />
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+
+                    {/* Concluídos/Cancelados */}
+                    {done.length > 0 && (
+                        <div style={{ marginTop: 20 }}>
+                            <p style={{ fontSize: 11, fontWeight: 700, color: '#c4c4c8', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 10 }}>Concluídos · Cancelados</p>
+                            {done.map(a => <ApptCard key={a.id} a={a} getSvc={getSvc} compact />)}
+                        </div>
+                    )}
+
+                    {/* Modal: Novo agendamento */}
+                    <Modal open={modal} onClose={() => setModal(false)} title="Novo Agendamento">
+                        <Field label="Nome da cliente">
+                            <input className="field" value={form.clientName} onChange={e => setForm({ ...form, clientName: e.target.value })} placeholder="Ex: Ana Santos" />
+                        </Field>
+                        <Field label="Serviço">
+                            <select className="field" value={form.serviceId} onChange={e => setForm({ ...form, serviceId: e.target.value })}>
+                                {services.map(s => <option key={s.id} value={s.id}>{s.icon} {s.name} — {fmtR(s.price)}</option>)}
+                            </select>
+                        </Field>
+                        <Field label="Data">
+                            <input className="field" type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value, time: '' })} />
+                        </Field>
+                        <Field label={`Horário disponível ${form.date !== todayStr() ? 'em ' + fmtDate(form.date) : ''}`}>
+                            {avail.length === 0 ? (
+                                <p style={{ fontSize: 13, color: '#dc2626', fontWeight: 500 }}>Nenhum horário disponível nessa data</p>
+                            ) : (
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 6 }}>
+                                    {avail.map(t => (
+                                        <button key={t} onClick={() => setForm({ ...form, time: t })} style={{
+                                            padding: '9px 4px', border: `1.5px solid ${form.time === t ? '#e11d78' : '#e4e4e7'}`,
+                                            borderRadius: 8, background: form.time === t ? '#fff0f6' : '#fff',
+                                            color: form.time === t ? '#e11d78' : '#3f3f46', fontWeight: form.time === t ? 700 : 400,
+                                            fontSize: 13, cursor: 'pointer', transition: 'all .15s',
+                                        }}>{t}</button>
+                                    ))}
+                                </div>
+                            )}
+                        </Field>
+                        <div style={{ display: 'flex', gap: 10, marginTop: 6 }}>
+                            <Btn v="ghost" onClick={() => setModal(false)} full>Cancelar</Btn>
+                            <Btn loading={saving} onClick={save} full>Salvar agendamento</Btn>
+                        </div>
+                    </Modal>
+                </div>
+            );
+        }
+
+        /* ── Tab: Agenda ─────────────────────────────────────────── */
+        function AgendaTab({ appts, getSvc, onUpdate }) {
+            const [selDate, setSelDate] = useState(todayStr());
+            const dayAppts = appts.filter(a => a.date === selDate).sort((a, b) => a.time.localeCompare(b.time));
+            const active = dayAppts.filter(a => a.status !== 'cancelled' && a.status !== 'done');
+            const done = dayAppts.filter(a => a.status === 'cancelled' || a.status === 'done');
+
+            const upcoming = appts
+                .filter(a => a.date >= todayStr() && a.status !== 'cancelled')
+                .slice(0, 7);
+
+            return (
+                <div>
+                    <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1a1a1a', letterSpacing: '-.4px', marginBottom: 24 }}>Agenda</h1>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 20, alignItems: 'start' }}>
+                        {/* Lateral */}
+                        <div>
+                            <div className="card" style={{ marginBottom: 14 }}>
+                                <p style={{ fontSize: 11, fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>Selecionar data</p>
+                                <input className="field" type="date" value={selDate} onChange={e => setSelDate(e.target.value)} />
+                            </div>
+
+                            <div className="card">
+                                <p style={{ fontSize: 11, fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 12 }}>Próximos</p>
+                                {upcoming.length === 0 && <p style={{ fontSize: 13, color: '#a1a1aa' }}>Nenhum</p>}
+                                {upcoming.map(a => {
+                                    const svc = getSvc(a.serviceId);
+                                    return (
+                                        <div key={a.id} onClick={() => setSelDate(a.date)} style={{
+                                            padding: '9px 10px', borderRadius: 9, cursor: 'pointer', marginBottom: 4,
+                                            background: selDate === a.date ? '#fff0f6' : 'transparent',
+                                            border: selDate === a.date ? '1px solid #fce7f3' : '1px solid transparent',
+                                            transition: 'all .15s',
+                                        }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <span style={{ fontSize: 12, fontWeight: 600, color: '#1a1a1a' }}>{a.clientName.split(' ')[0]}</span>
+                                                <span style={{ fontSize: 11, color: '#a1a1aa', fontWeight: 500 }}>{a.time}</span>
+                                            </div>
+                                            <p style={{ fontSize: 11, color: '#71717a', marginTop: 1 }}>{svc.icon} {svc.name} · {fmtDate(a.date)}</p>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* Dia selecionado */}
+                        <div>
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 16 }}>
+                                <h2 style={{ fontSize: 17, fontWeight: 700, color: '#1a1a1a' }}>{fmtDay(selDate)}, {fmtDate(selDate)}</h2>
+                                <span style={{ fontSize: 13, color: '#71717a' }}>{active.length} agendamento{active.length !== 1 ? 's' : ''}</span>
+                            </div>
+
+                            {active.length === 0 && done.length === 0 ? (
+                                <div className="card" style={{ textAlign: 'center', padding: '44px 24px' }}>
+                                    <div style={{ fontSize: 32, marginBottom: 8 }}>📭</div>
+                                    <p style={{ color: '#a1a1aa', fontWeight: 500 }}>Nenhum agendamento nessa data</p>
+                                </div>
+                            ) : (
+                                <>
+                                    {active.map(a => (
+                                        <ApptCard key={a.id} a={a} getSvc={getSvc}
+                                            onConfirm={a.status === 'pending' ? id => onUpdate(id, 'confirmed') : null}
+                                            onCancel={id => onUpdate(id, 'cancelled')}
+                                            onDone={a.status === 'confirmed' ? id => onUpdate(id, 'done') : null} />
+                                    ))}
+                                    {done.length > 0 && <>
+                                        <p style={{ fontSize: 11, fontWeight: 700, color: '#c4c4c8', textTransform: 'uppercase', letterSpacing: '.08em', margin: '16px 0 10px' }}>Concluídos · Cancelados</p>
+                                        {done.map(a => <ApptCard key={a.id} a={a} getSvc={getSvc} />)}
+                                    </>}
+                                </>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        /* ── Tab: Pendentes ─────────────────────────────────────── */
+        function PendingTab({ appts, getSvc, onUpdate }) {
+            const sorted = [...appts].sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+            return (
+                <div>
+                    <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1a1a1a', letterSpacing: '-.4px', marginBottom: 6 }}>Pendentes de Confirmação</h1>
+                    <p style={{ color: '#71717a', fontSize: 13, marginBottom: 24 }}>{sorted.length} aguardando resposta</p>
+
+                    {sorted.length === 0 ? (
+                        <div className="card" style={{ textAlign: 'center', padding: '56px 24px' }}>
+                            <div style={{ fontSize: 44, marginBottom: 12 }}>✅</div>
+                            <p style={{ fontWeight: 700, fontSize: 15, color: '#059669', marginBottom: 4 }}>Tudo confirmado!</p>
+                            <p style={{ color: '#a1a1aa', fontSize: 13 }}>Nenhum agendamento aguardando resposta</p>
+                        </div>
+                    ) : sorted.map(a => (
+                        <ApptCard key={a.id} a={a} getSvc={getSvc} showDate
+                            onConfirm={id => onUpdate(id, 'confirmed')}
+                            onCancel={id => onUpdate(id, 'cancelled')} />
+                    ))}
+                </div>
+            );
+        }
+
+        /* ── Tab: Serviços ──────────────────────────────────────── */
+        function ServicesTab({ services, setSvcs, toast }) {
+            const [editing, setEditing] = useState(null);
+            const [saving, setSaving] = useState(false);
+
+            const save = async () => {
+                if (!editing.name.trim()) { alert('Nome obrigatório'); return }
+                setSaving(true);
+                const updated = await API.updateService(editing.id, { name: editing.name, price: +editing.price, duration: +editing.duration, icon: editing.icon });
+                setSvcs(updated);
+                setSaving(false);
+                setEditing(null);
+                toast('Serviço atualizado! ✅');
+            };
+
+            return (
+                <div>
+                    <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1a1a1a', letterSpacing: '-.4px', marginBottom: 24 }}>Serviços</h1>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: 14 }}>
+                        {services.map(s => (
+                            <div key={s.id} className="card card-hover" style={{ position: 'relative' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                                    <span style={{ fontSize: 28 }}>{s.icon}</span>
+                                    <div>
+                                        <p style={{ fontWeight: 700, fontSize: 14, color: '#1a1a1a' }}>{s.name}</p>
+                                        <p style={{ fontSize: 12, color: '#71717a' }}>⏱ {s.duration} min</p>
+                                    </div>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ fontSize: 20, fontWeight: 800, color: '#e11d78' }}>{fmtR(s.price)}</span>
+                                    <Btn v="ghost" sz="sm" onClick={() => setEditing({ ...s })}>Editar</Btn>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    <Modal open={!!editing} onClose={() => setEditing(null)} title="Editar Serviço">
+                        {editing && <>
+                            <Field label="Emoji (ícone)">
+                                <input className="field" value={editing.icon} onChange={e => setEditing({ ...editing, icon: e.target.value })} placeholder="💅" style={{ width: 80 }} />
+                            </Field>
+                            <Field label="Nome do serviço">
+                                <input className="field" value={editing.name} onChange={e => setEditing({ ...editing, name: e.target.value })} />
+                            </Field>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                                <Field label="Preço (R$)">
+                                    <input className="field" type="number" value={editing.price} onChange={e => setEditing({ ...editing, price: e.target.value })} min="0" step="5" />
+                                </Field>
+                                <Field label="Duração (min)">
+                                    <input className="field" type="number" value={editing.duration} onChange={e => setEditing({ ...editing, duration: e.target.value })} min="10" step="5" />
+                                </Field>
+                            </div>
+                            <div style={{ display: 'flex', gap: 10, marginTop: 6 }}>
+                                <Btn v="ghost" onClick={() => setEditing(null)} full>Cancelar</Btn>
+                                <Btn loading={saving} onClick={save} full>Salvar</Btn>
+                            </div>
+                        </>}
+                    </Modal>
+                </div>
+            );
+        }
+
+        /* ═══════════════════════════════════════════════════════════════
+           PORTAL DA CLIENTE
+        ═══════════════════════════════════════════════════════════════ */
+
+        function ClientPortal({ user, onLogout }) {
+            const [tab, setTab] = useState('book');
+            const [appts, setAppts] = useState([]);
+            const [services, setSvcs] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const { list: toasts, add: toast } = useToast();
+            const pollRef = useRef();
+
+            const load = useCallback(async () => {
+                try {
+                    const [a, s] = await Promise.all([API.getAppointments({ clientId: user.id }), API.getServices()]);
+                    setAppts(a); setSvcs(s);
+                } catch { toast('Erro ao carregar', 'err') }
+                finally { setLoading(false) }
+            }, [user.id]);
+
+            useEffect(() => {
+                load();
+                pollRef.current = setInterval(load, 6000);
+                return () => clearInterval(pollRef.current);
+            }, [load]);
+
+            const book = async (data) => {
+                try {
+                    const a = await API.createAppointment({ ...data, clientId: user.id, clientName: user.name, status: 'pending' });
+                    setAppts(p => [...p, a]);
+                    toast('Agendamento solicitado! ✅');
+                    setTab('mine');
+                } catch (e) { toast(e.message, 'err') }
+            };
+
+            const cancel = async (id) => {
+                try {
+                    await API.updateAppointment(id, { status: 'cancelled' });
+                    setAppts(p => p.map(a => a.id === id ? { ...a, status: 'cancelled' } : a));
+                    toast('Agendamento cancelado', 'warn');
+                } catch (e) { toast(e.message, 'err') }
+            };
+
+            const upcoming = appts.filter(a => a.date >= todayStr() && a.status !== 'cancelled' && a.status !== 'done');
+            const getSvc = id => services.find(s => s.id === id) || {};
+
+            return (
+                <div style={{ minHeight: '100vh', background: '#fafafa' }}>
+                    <Toasts list={toasts} />
+
+                    {/* Header */}
+                    <header style={{
+                        background: '#fff', borderBottom: '1px solid #e4e4e7',
+                        position: 'sticky', top: 0, zIndex: 100,
+                        padding: '0 24px', height: 62,
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <div style={{
+                                width: 34, height: 34,
+                                background: 'linear-gradient(135deg,#e11d78,#be185d)',
+                                borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15,
+                                boxShadow: '0 2px 8px rgba(225,29,120,.3)',
+                            }}>💅</div>
+                            <div>
+                                <p style={{ fontWeight: 700, fontSize: 14, color: '#1a1a1a', lineHeight: 1.2 }}>Belle Studio</p>
+                                <p style={{ fontSize: 11, color: '#a1a1aa', lineHeight: 1.2 }}>Olá, {user.name.split(' ')[0]}!</p>
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            {upcoming.length > 0 && (
+                                <span style={{
+                                    background: '#fff0f6', color: '#e11d78', fontSize: 11, fontWeight: 600,
+                                    padding: '4px 10px', borderRadius: 20, border: '1px solid #fce7f3',
+                                }}>{upcoming.length} próximo{upcoming.length !== 1 ? 's' : ''}</span>
+                            )}
+                            {/* Live indicator */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 20, background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
+                                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#059669', animation: 'pulse 2s infinite' }} />
+                                <span style={{ fontSize: 10, fontWeight: 600, color: '#059669' }}>ao vivo</span>
+                            </div>
+                            <button onClick={onLogout} style={{ background: 'none', border: '1px solid #e4e4e7', borderRadius: 8, padding: '6px 12px', color: '#71717a', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}>Sair</button>
+                        </div>
+                    </header>
+
+                    {/* Tab nav */}
+                    <div style={{ background: '#fff', borderBottom: '1px solid #e4e4e7', padding: '0 24px', display: 'flex', gap: 2 }}>
+                        {[['book', '📅 Agendar'], ['mine', `📋 Meus Agendamentos${upcoming.length ? ` (${upcoming.length})` : ''}`]].map(([k, l]) => (
+                            <button key={k} onClick={() => setTab(k)} style={{
+                                background: 'none', border: 'none', padding: '14px 14px 11px',
+                                borderBottom: tab === k ? '2.5px solid #e11d78' : '2.5px solid transparent',
+                                color: tab === k ? '#e11d78' : '#71717a', fontWeight: tab === k ? 700 : 500,
+                                fontSize: 13, cursor: 'pointer', transition: 'all .15s',
+                            }}>{l}</button>
+                        ))}
+                    </div>
+
+                    <div style={{ padding: '24px 20px', maxWidth: 580, margin: '0 auto' }}>
+                        {loading ? (
+                            <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 72 }}><Spinner size={38} /></div>
+                        ) : tab === 'book' ? (
+                            <BookingWizard services={services} appts={appts} onBook={book} />
+                        ) : (
+                            <MyBookings appts={appts} getSvc={getSvc} onCancel={cancel} />
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        /* ── Booking Wizard ──────────────────────────────────────── */
+        function BookingWizard({ services, appts, onBook }) {
+            const [step, setStep] = useState(0);
+            const [svc, setSvc] = useState(null);
+            const [date, setDate] = useState(todayStr());
+            const [time, setTime] = useState('');
+            const [busy, setBusy] = useState(false);
+
+            const taken = appts.filter(a => a.date === date && a.status !== 'cancelled').map(a => a.time);
+            const avail = TIME_SLOTS.filter(t => !taken.includes(t));
+
+            const reset = () => { setStep(0); setSvc(null); setDate(todayStr()); setTime('') };
+
+            const confirm = async () => {
+                setBusy(true);
+                try { await onBook({ serviceId: svc.id, date, time }); reset() }
+                finally { setBusy(false) }
+            };
+
+            const STEPS = ['Serviço', 'Data', 'Horário', 'Confirmar'];
+
+            return (
+                <div className="anim-fade">
+                    <h1 style={{ fontSize: 20, fontWeight: 800, color: '#1a1a1a', letterSpacing: '-.3px', marginBottom: 4 }}>Agendar Serviço</h1>
+                    <p style={{ color: '#71717a', fontSize: 13, marginBottom: 24 }}>Rápido, simples e sem complicação</p>
+
+                    {/* Steps indicator */}
+                    <div style={{ display: 'flex', alignItems: 'center', marginBottom: 28 }}>
+                        {STEPS.map((s, i) => (
+                            <React.Fragment key={i}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                                    <div style={{
+                                        width: 26, height: 26, borderRadius: 13, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        fontSize: 11, fontWeight: 700, flexShrink: 0, transition: 'all .25s',
+                                        background: step > i ? '#059669' : step === i ? '#e11d78' : '#f0f0f0',
+                                        color: step >= i ? '#fff' : '#a1a1aa',
+                                        boxShadow: step === i ? '0 0 0 3px rgba(225,29,120,.2)' : 'none',
+                                    }}>{step > i ? '✓' : i + 1}</div>
+                                    <span style={{ fontSize: 11, fontWeight: step === i ? 700 : 400, color: step === i ? '#1a1a1a' : '#a1a1aa', whiteSpace: 'nowrap' }}>{s}</span>
+                                </div>
+                                {i < 3 && <div style={{ flex: 1, height: 1.5, background: step > i ? '#059669' : '#e4e4e7', margin: '0 6px', minWidth: 8, transition: 'background .3s' }} />}
+                            </React.Fragment>
+                        ))}
+                    </div>
+
+                    {/* Step 0: Serviço */}
+                    {step === 0 && (
+                        <div className="anim-slide">
+                            <p style={{ fontSize: 11, fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 12 }}>Escolha o serviço</p>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                {services.map(s => (
+                                    <div key={s.id} onClick={() => { setSvc(s); setStep(1) }} style={{
+                                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                        padding: '16px 18px', borderRadius: 14,
+                                        border: `1.5px solid ${svc?.id === s.id ? '#e11d78' : '#e4e4e7'}`,
+                                        background: svc?.id === s.id ? '#fff0f6' : '#fff',
+                                        cursor: 'pointer', transition: 'all .15s',
+                                    }}
+                                        onMouseEnter={e => { if (svc?.id !== s.id) { e.currentTarget.style.borderColor = '#d4d4d8'; e.currentTarget.style.background = '#f9f9f9' } }}
+                                        onMouseLeave={e => { if (svc?.id !== s.id) { e.currentTarget.style.borderColor = '#e4e4e7'; e.currentTarget.style.background = '#fff' } }}
+                                    >
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                            <span style={{ fontSize: 28 }}>{s.icon}</span>
+                                            <div>
+                                                <p style={{ fontWeight: 700, fontSize: 14, color: '#1a1a1a' }}>{s.name}</p>
+                                                <p style={{ fontSize: 12, color: '#71717a' }}>⏱ {s.duration} min</p>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <p style={{ fontWeight: 800, fontSize: 17, color: '#e11d78', textAlign: 'right' }}>{fmtR(s.price)}</p>
+                                            {svc?.id === s.id && <p style={{ fontSize: 10, color: '#e11d78', textAlign: 'right' }}>selecionado ✓</p>}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Step 1: Data */}
+                    {step === 1 && (
+                        <div className="anim-slide">
+                            <button onClick={() => setStep(0)} style={{ background: 'none', border: 'none', color: '#71717a', fontSize: 13, cursor: 'pointer', marginBottom: 16, padding: 0, display: 'flex', alignItems: 'center', gap: 4 }}>← Voltar</button>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', background: '#fff0f6', borderRadius: 12, marginBottom: 20, border: '1px solid #fce7f3' }}>
+                                <span style={{ fontSize: 24 }}>{svc.icon}</span>
+                                <div>
+                                    <p style={{ fontWeight: 700, fontSize: 14 }}>{svc.name}</p>
+                                    <p style={{ fontSize: 12, color: '#71717a' }}>{fmtR(svc.price)} · {svc.duration} min</p>
+                                </div>
+                            </div>
+
+                            <Field label="Data do atendimento">
+                                <input className="field" type="date" value={date} onChange={e => setDate(e.target.value)} min={todayStr()} />
+                            </Field>
+                            <Btn onClick={() => setStep(2)} full sz="lg" style={{ marginTop: 4 }}>Ver horários disponíveis →</Btn>
+                        </div>
+                    )}
+
+                    {/* Step 2: Horário */}
+                    {step === 2 && (
+                        <div className="anim-slide">
+                            <button onClick={() => setStep(1)} style={{ background: 'none', border: 'none', color: '#71717a', fontSize: 13, cursor: 'pointer', marginBottom: 16, padding: 0, display: 'flex', alignItems: 'center', gap: 4 }}>← Voltar</button>
+                            <p style={{ fontWeight: 700, fontSize: 15, color: '#1a1a1a', marginBottom: 2 }}>{fmtDay(date)}, {fmtDate(date)}</p>
+                            <p style={{ fontSize: 13, color: '#71717a', marginBottom: 16 }}>{avail.length} horário{avail.length !== 1 ? 's' : ''} disponível{avail.length !== 1 ? 'is' : ''}</p>
+
+                            {avail.length === 0 ? (
+                                <div className="card" style={{ textAlign: 'center', padding: 36 }}>
+                                    <div style={{ fontSize: 32, marginBottom: 8 }}>😔</div>
+                                    <p style={{ color: '#71717a', fontWeight: 500, marginBottom: 12 }}>Nenhum horário disponível</p>
+                                    <Btn v="outline" sz="sm" onClick={() => setStep(1)}>Escolher outra data</Btn>
+                                </div>
+                            ) : (
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
+                                    {avail.map(t => (
+                                        <div key={t} onClick={() => { setTime(t); setStep(3) }} style={{
+                                            padding: '14px 6px', textAlign: 'center', borderRadius: 12,
+                                            border: `1.5px solid ${time === t ? '#e11d78' : '#e4e4e7'}`,
+                                            background: time === t ? '#fff0f6' : '#fff', cursor: 'pointer',
+                                            fontWeight: 700, fontSize: 14, color: time === t ? '#e11d78' : '#1a1a1a',
+                                            transition: 'all .15s',
+                                        }}
+                                            onMouseEnter={e => { if (time !== t) { e.currentTarget.style.borderColor = '#d4d4d8' } }}
+                                            onMouseLeave={e => { if (time !== t) { e.currentTarget.style.borderColor = '#e4e4e7' } }}
+                                        >{t}</div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Step 3: Confirmar */}
+                    {step === 3 && (
+                        <div className="anim-slide">
+                            <button onClick={() => setStep(2)} style={{ background: 'none', border: 'none', color: '#71717a', fontSize: 13, cursor: 'pointer', marginBottom: 16, padding: 0, display: 'flex', alignItems: 'center', gap: 4 }}>← Voltar</button>
+                            <h3 style={{ fontSize: 17, fontWeight: 700, marginBottom: 16 }}>Confirme seu agendamento</h3>
+
+                            <div className="card" style={{ marginBottom: 18 }}>
+                                {[
+                                    ['Serviço', `${svc?.icon} ${svc?.name}`],
+                                    ['Data', `${fmtDay(date)}, ${fmtDate(date)}`],
+                                    ['Horário', time],
+                                    ['Duração', `${svc?.duration} minutos`],
+                                    ['Valor', fmtR(svc?.price)],
+                                ].map(([k, v], i, arr) => (
+                                    <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '11px 0', borderBottom: i < arr.length - 1 ? '1px solid #f4f4f4' : 'none' }}>
+                                        <span style={{ fontSize: 13, color: '#71717a' }}>{k}</span>
+                                        <span style={{ fontSize: 13, fontWeight: 700, color: k === 'Valor' ? '#e11d78' : '#1a1a1a' }}>{v}</span>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div style={{ padding: '12px 16px', background: '#fffbeb', borderRadius: 10, border: '1px solid #fde68a', marginBottom: 18 }}>
+                                <p style={{ fontSize: 12, color: '#92400e', fontWeight: 600 }}>⏳ Aguardando confirmação da manicure</p>
+                                <p style={{ fontSize: 11, color: '#b45309', marginTop: 2 }}>Você receberá a confirmação em breve.</p>
+                            </div>
+
+                            <Btn onClick={confirm} loading={busy} sz="lg" full>✅ Confirmar Agendamento</Btn>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        /* ── Meus Agendamentos ───────────────────────────────────── */
+        function MyBookings({ appts, getSvc, onCancel }) {
+            const today = todayStr();
+            const upcoming = appts.filter(a => a.date >= today && a.status !== 'cancelled' && a.status !== 'done')
+                .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+            const past = appts.filter(a => a.date < today || a.status === 'cancelled' || a.status === 'done')
+                .sort((a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time));
+
+            const Card = ({ a }) => {
+                const svc = getSvc(a.serviceId);
+                const isPast = a.date < today;
+                const [cancelling, setCancelling] = useState(false);
+
+                const doCancel = async () => {
+                    if (!confirm('Deseja cancelar este agendamento?')) return;
+                    setCancelling(true);
+                    await onCancel(a.id);
+                    setCancelling(false);
+                };
+
+                return (
+                    <div style={{
+                        background: '#fff', border: '1px solid #e4e4e7', borderRadius: 14,
+                        padding: '18px 20px', marginBottom: 10, opacity: isPast ? .72 : 1,
+                        transition: 'box-shadow .15s',
+                    }}>
+                        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                            <div style={{
+                                width: 50, height: 50, borderRadius: 13,
+                                background: 'linear-gradient(135deg,#fff0f6,#fce7f3)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0,
+                                border: '1px solid #fce7f3',
+                            }}>{svc.icon || '💅'}</div>
+                            <div style={{ flex: 1 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+                                    <span style={{ fontWeight: 700, fontSize: 14, color: '#1a1a1a' }}>{svc.name}</span>
+                                    <Badge status={a.status} />
+                                </div>
+                                <p style={{ fontSize: 12, color: '#71717a' }}>{fmtFull(a.date, a.time)} · {fmtR(svc.price || 0)}</p>
+                            </div>
+                        </div>
+                        {(a.status === 'pending' || a.status === 'confirmed') && a.date >= today && (
+                            <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #f4f4f4', display: 'flex', justifyContent: 'flex-end' }}>
+                                <Btn v="danger" sz="sm" loading={cancelling} onClick={doCancel}>Cancelar agendamento</Btn>
+                            </div>
+                        )}
+                    </div>
+                );
+            };
+
+            if (appts.length === 0) return (
+                <div className="card anim-fade" style={{ textAlign: 'center', padding: '56px 24px' }}>
+                    <div style={{ fontSize: 44, marginBottom: 12 }}>🌸</div>
+                    <p style={{ fontWeight: 700, fontSize: 15, color: '#1a1a1a', marginBottom: 4 }}>Nenhum agendamento ainda</p>
+                    <p style={{ color: '#a1a1aa', fontSize: 13 }}>Use a aba "Agendar" para marcar seu horário</p>
+                </div>
+            );
+
+            return (
+                <div className="anim-fade">
+                    {upcoming.length > 0 && <>
+                        <p style={{ fontSize: 11, fontWeight: 700, color: '#71717a', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 12 }}>Próximos</p>
+                        {upcoming.map(a => <Card key={a.id} a={a} />)}
+                    </>}
+                    {past.length > 0 && <>
+                        <p style={{ fontSize: 11, fontWeight: 700, color: '#c4c4c8', textTransform: 'uppercase', letterSpacing: '.08em', margin: '20px 0 12px' }}>Histórico</p>
+                        {past.map(a => <Card key={a.id} a={a} />)}
+                    </>}
+                </div>
+            );
+        }
+
+        /* ═══════════════════════════════════════════════════════════════
+           APP ROOT
+        ═══════════════════════════════════════════════════════════════ */
+
+        function App() {
+            const [user, setUser] = useState(null);
+            const [ready, setReady] = useState(false);
+
+            useEffect(() => {
+                API.init().then(() => setReady(true));
+            }, []);
+
+            if (!ready) return (
+                <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f5f4f0', gap: 16 }}>
+                    <Spinner size={44} />
+                    <p style={{ color: '#71717a', fontSize: 14, fontWeight: 500 }}>Iniciando sistema...</p>
+                </div>
+            );
+
+            if (!user) return <LoginPage onLogin={setUser} />;
+            if (user.role === 'owner') return <OwnerPortal onLogout={() => setUser(null)} />;
+            return <ClientPortal user={user} onLogout={() => setUser(null)} />;
+        }
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+
+</html>
