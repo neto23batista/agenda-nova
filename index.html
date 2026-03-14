@@ -1250,6 +1250,7 @@
 
     /* ── Dashboard Tab ─────────────────────────────────────── */
     function DashTab({ appts, getSvc, today }) {
+      const isMob = useIsMobile();
       const curMonth = today.slice(0, 7);
       const todayA = appts.filter(a => a.date === today);
       const monthA = appts.filter(a => a.date.startsWith(curMonth));
@@ -1299,11 +1300,11 @@
           </div>
 
           {/* KPIs */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 14, marginBottom: 28 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMob ? '1fr 1fr' : 'repeat(auto-fit,minmax(200px,1fr))', gap: 10, marginBottom: 20 }}>
             {kpis.map(k => <KPI key={k.label} {...k} />)}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMob ? '1fr' : '1fr 1fr', gap: 14 }}>
             {/* Top Serviços */}
             <div className="card card-p">
               <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1c1917', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 7 }}>
@@ -1492,7 +1493,9 @@
       const [selDate, setSelDate] = useState(todayStr());
       const [viewYear, setViewYear] = useState(new Date().getFullYear());
       const [viewMonth, setViewMonth] = useState(new Date().getMonth());
+      const [showDay, setShowDay] = useState(false);
       const today = todayStr();
+      const isMob = useIsMobile();
 
       /* Mapa de datas → contagem */
       const dateMap = useMemo(() => {
@@ -1530,7 +1533,7 @@
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1c1917', fontFamily: "'Playfair Display',serif", letterSpacing: '-.4px', marginBottom: 24 }}>Calendário</h1>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 20, alignItems: 'start' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMob ? '1fr' : '300px 1fr', gap: isMob ? 14 : 20, alignItems: 'start' }}>
             {/* Calendário */}
             <div className="card card-p" style={{ overflow: 'hidden', padding: '18px 16px' }}>
               {/* Cabeçalho mês */}
@@ -1577,14 +1580,33 @@
               </div>
 
               {/* Legenda */}
-              <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid #f0ede8', display: 'flex', gap: 14 }}>
+              <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid #f0ede8', display: 'flex', gap: 14, flexWrap: 'wrap' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: '#d63371' }} /><span style={{ fontSize: 10, color: '#a8a29e' }}>Com agendamentos</span></div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 18, height: 18, borderRadius: '50%', background: '#d63371', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: '#fff', fontWeight: 800 }}>H</span><span style={{ fontSize: 10, color: '#a8a29e' }}>Hoje</span></div>
               </div>
+
+              {/* Mobile: botão para ver agendamentos do dia */}
+              {isMob && (
+                <button onClick={() => setShowDay(v => !v)} style={{
+                  width: '100%', marginTop: 14, padding: '11px',
+                  background: 'linear-gradient(135deg,#d63371,#b5274f)',
+                  color: '#fff', border: 'none', borderRadius: 10,
+                  fontWeight: 700, fontSize: 13, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                }}>
+                  {showDay ? '← Voltar ao calendário' : `Ver ${fmtDay(selDate)}, ${fmtDate(selDate)} →`}
+                  {(active.length > 0) && !showDay && <span style={{ background: 'rgba(255,255,255,.25)', padding: '2px 8px', borderRadius: 20, fontSize: 11 }}>{active.length}</span>}
+                </button>
+              )}
             </div>
 
-            {/* Detalhe do dia */}
-            <div>
+            {/* Detalhe do dia — oculto no mobile até clicar */}
+            <div style={{ display: isMob && !showDay ? 'none' : 'block' }}>
+              {isMob && (
+                <div style={{ marginBottom: 16 }}>
+                  <button onClick={() => setShowDay(false)} style={{ background: 'none', border: 'none', color: '#78716c', fontSize: 13, cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 5, marginBottom: 12 }}>← Voltar</button>
+                </div>
+              )}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
                 <div>
                   <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1c1917' }}>{fmtDay(selDate)}, {fmtDate(selDate)}</h2>
@@ -1627,6 +1649,7 @@
 
     /* ── Relatórios Tab ─────────────────────────────────────── */
     function ReportTab({ appts, services, getSvc }) {
+      const isMob = useIsMobile();
       const [period, setPeriod] = useState('month');
       const today = todayStr();
       const [y, m] = today.split('-').map(Number);
@@ -1696,18 +1719,16 @@
 
       return (
         <div>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 14 }}>
-            <div>
-              <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1c1917', fontFamily: "'Playfair Display',serif", letterSpacing: '-.4px' }}>Relatórios</h1>
-              <p style={{ color: '#78716c', fontSize: 13, marginTop: 2 }}>Financeiro e procedimentos</p>
-            </div>
-            <div style={{ display: 'flex', background: '#f7f5f2', borderRadius: 10, padding: 3, gap: 2 }}>
+          <div style={{ marginBottom: 20 }}>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1c1917', fontFamily: "'Playfair Display',serif", letterSpacing: '-.4px', marginBottom: 2 }}>Relatórios</h1>
+            <p style={{ color: '#78716c', fontSize: 13, marginBottom: 14 }}>Financeiro e procedimentos</p>
+            <div style={{ display: 'flex', background: '#f7f5f2', borderRadius: 10, padding: 3, gap: 2, width: 'fit-content' }}>
               {[['week', 'Semana'], ['month', 'Mês'], ['quarter', 'Trimestre'], ['year', 'Ano']].map(([k, l]) => (
                 <button key={k} onClick={() => setPeriod(k)} style={{
-                  padding: '7px 14px', border: 'none', borderRadius: 8,
+                  padding: isMob ? '8px 12px' : '7px 14px', border: 'none', borderRadius: 8,
                   background: period === k ? '#fff' : 'transparent',
                   color: period === k ? '#1c1917' : '#78716c',
-                  fontWeight: period === k ? 700 : 400, fontSize: 12,
+                  fontWeight: period === k ? 700 : 400, fontSize: isMob ? 13 : 12,
                   boxShadow: period === k ? '0 1px 4px rgba(0,0,0,.08)' : 'none',
                   transition: 'all .2s', cursor: 'pointer',
                 }}>{l}</button>
@@ -1716,7 +1737,7 @@
           </div>
 
           {/* KPIs financeiros */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 12, marginBottom: 24 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMob ? '1fr 1fr' : 'repeat(auto-fit,minmax(160px,1fr))', gap: 10, marginBottom: 20 }}>
             {[
               { icon: '💰', label: 'Faturamento', value: fmtR(totalRev), color: '#059669' },
               { icon: '📋', label: 'Concluídos', value: done.length, color: '#d63371' },
@@ -1726,13 +1747,13 @@
             ].map(k => <KPI key={k.label} {...k} style={{ padding: '16px 18px' }} />)}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, marginBottom: 18 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMob ? '1fr' : '1fr 1fr', gap: 14, marginBottom: 16 }}>
             {/* Gráfico receita por dia */}
             <div className="card card-p">
               <h3 style={{ fontSize: 13, fontWeight: 700, color: '#1c1917', marginBottom: 4 }}>📈 Receita por período</h3>
               <p style={{ fontSize: 11, color: '#a8a29e', marginBottom: 16 }}>Total: {fmtR(totalRev)}</p>
-              <div className="bar-chart">
-                {dailyData.map((d, i) => {
+              <div className="bar-chart" style={{ height: isMob ? 100 : 140 }}>
+                {(isMob ? dailyData.slice(-7) : dailyData).map((d, i) => {
                   const pct = d.rev / maxDaily;
                   return (
                     <div key={i} className="bar-wrap" title={`${d.label}: ${fmtR(d.rev)}`}>
@@ -1783,8 +1804,8 @@
           <div className="card card-p">
             <h3 style={{ fontSize: 13, fontWeight: 700, color: '#1c1917', marginBottom: 16 }}>📋 Detalhamento de procedimentos</h3>
             {done.length === 0 ? <p style={{ color: '#a8a29e', fontSize: 13 }}>Sem procedimentos concluídos no período</p> : (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                <table style={{ width: isMob ? '600px' : '100%', minWidth: isMob ? '600px' : 'auto', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
                     <tr style={{ borderBottom: '1.5px solid #f0ede8' }}>
                       {['Data', 'Hora', 'Cliente', 'Serviço', 'Valor'].map(h => (
@@ -1822,6 +1843,7 @@
 
     /* ── Clientes Tab ─────────────────────────────────────────── */
     function ClientsTab({ clients, appts, getSvc, onAdd, toast }) {
+      const isMob = useIsMobile();
       const [search, setSearch] = useState('');
       const [modal, setModal] = useState(false);
       const [editModal, setEditModal] = useState(null);
@@ -1957,7 +1979,7 @@
                       </div>
 
                       {/* Stats */}
-                      <div style={{ display: 'flex', gap: 16, flexShrink: 0 }}>
+                      {!isMob && <div style={{ display: 'flex', gap: 16, flexShrink: 0 }}>
                         {[
                           { l: 'Visitas', v: stats.count, c: '#d63371' },
                           { l: 'Gasto total', v: fmtRi(stats.rev), c: '#059669' },
@@ -1968,7 +1990,7 @@
                             <p style={{ fontSize: 10, color: '#a8a29e', fontWeight: 500 }}>{s.l}</p>
                           </div>
                         ))}
-                      </div>
+                      </div>}
 
                       <Btn v="ghost" sz="sm" onClick={() => openEdit(c)}>Editar</Btn>
                     </div>
@@ -2012,7 +2034,7 @@
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1c1917', fontFamily: "'Playfair Display',serif", letterSpacing: '-.4px', marginBottom: 24 }}>Serviços</h1>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gap: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(min(240px,100%),1fr))', gap: 12 }}>
             {services.map(s => (
               <div key={s.id} className="card ch" style={{ padding: '20px 22px' }}>
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 14 }}>
