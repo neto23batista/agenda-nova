@@ -196,7 +196,8 @@
     .layout {
       display: flex;
       height: 100vh;
-      overflow: hidden
+      overflow: hidden;
+      flex-direction: column
     }
 
     .sidebar {
@@ -211,7 +212,8 @@
     .main-area {
       flex: 1;
       overflow-y: auto;
-      background: var(--bg)
+      background: var(--bg);
+      min-width: 0
     }
 
     .page-wrap {
@@ -1080,97 +1082,168 @@
       const monthAppts = appts.filter(a => a.date.startsWith(curMonth));
       const monthRev = monthAppts.filter(a => a.status !== 'cancelled').reduce((s, a) => s + (getSvc(a.serviceId).price || 0), 0);
 
+      const isMob = useIsMobile();
+
+      /* ─── Ícones para bottom nav mobile ─── */
+      const MOB_NAV = [
+        { id: 'dashboard', emoji: '📊', label: 'Início' },
+        { id: 'hoje', emoji: '☀️', label: 'Hoje' },
+        { id: 'agenda', emoji: '📅', label: 'Agenda' },
+        { id: 'relatorio', emoji: '📈', label: 'Relatório' },
+        { id: 'clientes', emoji: '👥', label: 'Clientes' },
+        { id: 'servicos', emoji: '💅', label: 'Serviços' },
+      ];
+
       return (
-        <div className="layout">
+        <div className="layout" style={{ flexDirection: 'column' }}>
           <Toasts list={toasts} />
 
-          {/* ── SIDEBAR ── */}
-          <aside className="sidebar">
-            {/* Brand */}
-            <div style={{ padding: '22px 18px 20px', borderBottom: '1px solid #1c1917' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{
-                  width: 38, height: 38, borderRadius: 11,
-                  background: 'linear-gradient(135deg,#d63371,#b5274f)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 17, boxShadow: '0 4px 14px rgba(214,51,113,.45)',
-                }}>💅</div>
-                <div>
-                  <p style={{ color: '#fafaf9', fontWeight: 700, fontSize: 14, fontFamily: "'Playfair Display',serif", lineHeight: 1.2 }}>Belle Studio</p>
-                  <p style={{ color: '#44403c', fontSize: 10, fontWeight: 500 }}>Painel da Proprietária</p>
+          {/* ── Layout container ── */}
+          <div style={{ display: 'flex', flex: 1, overflow: 'hidden', flexDirection: 'row' }}>
+
+            {/* ── SIDEBAR (desktop only) ── */}
+            <aside className="sidebar">
+              <div style={{ padding: '22px 18px 20px', borderBottom: '1px solid #1c1917' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ width: 38, height: 38, borderRadius: 11, background: 'linear-gradient(135deg,#d63371,#b5274f)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, boxShadow: '0 4px 14px rgba(214,51,113,.45)' }}>💅</div>
+                  <div>
+                    <p style={{ color: '#fafaf9', fontWeight: 700, fontSize: 14, fontFamily: "'Playfair Display',serif", lineHeight: 1.2 }}>Belle Studio</p>
+                    <p style={{ color: '#44403c', fontSize: 10, fontWeight: 500 }}>Painel da Proprietária</p>
+                  </div>
                 </div>
               </div>
-            </div>
-
-            {/* Nav */}
-            <nav style={{ padding: '14px 10px', flex: 1 }}>
-              <p style={{ color: '#292524', fontSize: 9, fontWeight: 700, letterSpacing: '.1em', padding: '0 8px 10px', textTransform: 'uppercase' }}>Menu</p>
-              {NAV.map(n => (
-                <button key={n.id} onClick={() => setTab(n.id)} style={{
-                  width: '100%', display: 'flex', alignItems: 'center', gap: 9,
-                  padding: '10px 12px', borderRadius: 9, border: 'none',
-                  background: tab === n.id ? '#1c1917' : 'transparent',
-                  color: tab === n.id ? '#fafaf9' : '#78716c',
-                  fontWeight: tab === n.id ? 600 : 400, fontSize: 13,
-                  marginBottom: 2, cursor: 'pointer', textAlign: 'left', transition: 'all .15s',
-                }}>
-                  <span style={{ fontSize: 13, opacity: .8, fontFamily: 'monospace' }}>{n.icon}</span>
-                  {n.label}
-                  {n.id === 'hoje' && pending.length > 0 && (
-                    <span style={{ marginLeft: 'auto', background: '#d63371', color: '#fff', fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 20 }}>{pending.length}</span>
-                  )}
-                </button>
-              ))}
-            </nav>
-
-            {/* Resumo mês */}
-            <div style={{ padding: '14px 18px', borderTop: '1px solid #1c1917' }}>
-              <p style={{ color: '#44403c', fontSize: 9, fontWeight: 700, letterSpacing: '.1em', marginBottom: 12, textTransform: 'uppercase' }}>Este mês</p>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                {[
-                  { l: 'Agendamentos', v: monthAppts.filter(a => a.status !== 'cancelled').length, c: '#fafaf9' },
-                  { l: 'Faturamento', v: fmtRi(monthRev), c: '#d63371' },
-                ].map(s => (
-                  <div key={s.l}>
-                    <p style={{ color: '#44403c', fontSize: 10, fontWeight: 500, marginBottom: 2 }}>{s.l}</p>
-                    <p style={{ color: s.c, fontWeight: 700, fontSize: 15, letterSpacing: '-.3px' }}>{s.v}</p>
-                  </div>
+              <nav style={{ padding: '14px 10px', flex: 1 }}>
+                <p style={{ color: '#292524', fontSize: 9, fontWeight: 700, letterSpacing: '.1em', padding: '0 8px 10px', textTransform: 'uppercase' }}>Menu</p>
+                {NAV.map(n => (
+                  <button key={n.id} onClick={() => setTab(n.id)} style={{
+                    width: '100%', display: 'flex', alignItems: 'center', gap: 9,
+                    padding: '10px 12px', borderRadius: 9, border: 'none',
+                    background: tab === n.id ? '#1c1917' : 'transparent',
+                    color: tab === n.id ? '#fafaf9' : '#78716c',
+                    fontWeight: tab === n.id ? 600 : 400, fontSize: 13,
+                    marginBottom: 2, cursor: 'pointer', textAlign: 'left', transition: 'all .15s',
+                  }}>
+                    <span style={{ fontSize: 13, opacity: .8, fontFamily: 'monospace' }}>{n.icon}</span>
+                    {n.label}
+                    {n.id === 'hoje' && pending.length > 0 && (
+                      <span style={{ marginLeft: 'auto', background: '#d63371', color: '#fff', fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 20 }}>{pending.length}</span>
+                    )}
+                  </button>
                 ))}
+              </nav>
+              <div style={{ padding: '14px 18px', borderTop: '1px solid #1c1917' }}>
+                <p style={{ color: '#44403c', fontSize: 9, fontWeight: 700, letterSpacing: '.1em', marginBottom: 12, textTransform: 'uppercase' }}>Este mês</p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  {[{ l: 'Agendamentos', v: monthAppts.filter(a => a.status !== 'cancelled').length, c: '#fafaf9' }, { l: 'Faturamento', v: fmtRi(monthRev), c: '#d63371' }].map(s => (
+                    <div key={s.l}>
+                      <p style={{ color: '#44403c', fontSize: 10, fontWeight: 500, marginBottom: 2 }}>{s.l}</p>
+                      <p style={{ color: s.c, fontWeight: 700, fontSize: 15, letterSpacing: '-.3px' }}>{s.v}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
+              <div style={{ padding: '12px 10px', borderTop: '1px solid #1c1917', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px' }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#059669', animation: 'pulse2 2s infinite' }} />
+                  <span style={{ fontSize: 10, color: '#52525b', fontWeight: 500 }}>Sincronizado ao vivo</span>
+                </div>
+                <button onClick={onLogout} style={{ width: '100%', padding: '9px', borderRadius: 9, background: 'transparent', border: '1px solid #292524', color: '#52525b', fontSize: 12, cursor: 'pointer', fontWeight: 500 }}>← Sair do painel</button>
+              </div>
+            </aside>
 
-            {/* Live indicator + Sair */}
-            <div style={{ padding: '12px 10px', borderTop: '1px solid #1c1917', display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px' }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#059669', animation: 'pulse2 2s infinite' }} />
-                <span style={{ fontSize: 10, color: '#52525b', fontWeight: 500 }}>Sincronizado ao vivo</span>
-              </div>
-              <button onClick={onLogout} style={{
-                width: '100%', padding: '9px', borderRadius: 9,
-                background: 'transparent', border: '1px solid #292524',
-                color: '#52525b', fontSize: 12, cursor: 'pointer', fontWeight: 500,
-              }}>← Sair do painel</button>
-            </div>
-          </aside>
+            {/* ── MAIN ── */}
+            <main className="main-area" style={{ paddingBottom: isMob ? 72 : 0 }}>
+              {/* Mobile header */}
+              {isMob && (
+                <div style={{
+                  background: '#12100e', padding: '14px 16px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  position: 'sticky', top: 0, zIndex: 100,
+                  borderBottom: '1px solid #1c1917',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                    <div style={{ width: 32, height: 32, borderRadius: 9, background: 'linear-gradient(135deg,#d63371,#b5274f)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, boxShadow: '0 3px 10px rgba(214,51,113,.4)' }}>💅</div>
+                    <div>
+                      <p style={{ color: '#fafaf9', fontWeight: 700, fontSize: 13, fontFamily: "'Playfair Display',serif", lineHeight: 1.1 }}>Belle Studio</p>
+                      <p style={{ color: '#52525b', fontSize: 10 }}>Painel · Proprietária</p>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {pending.length > 0 && (
+                      <span style={{ background: '#d63371', color: '#fff', fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 20 }}>
+                        {pending.length} pendente{pending.length !== 1 ? 's' : ''} ⏳
+                      </span>
+                    )}
+                    <button onClick={onLogout} style={{ background: 'transparent', border: '1px solid #292524', borderRadius: 8, padding: '5px 11px', color: '#78716c', fontSize: 11, cursor: 'pointer', fontWeight: 500 }}>Sair</button>
+                  </div>
+                </div>
+              )}
 
-          {/* ── MAIN ── */}
-          <main className="main-area">
-            {loading ? (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 14, flexDirection: 'column' }}>
-                <Spinner sz={40} />
-                <p style={{ color: '#a8a29e', fontSize: 13 }}>Carregando dados...</p>
-              </div>
-            ) : (
-              <div className="page-wrap fu">
-                {tab === 'dashboard' && <DashTab appts={appts} getSvc={getSvc} today={today} toast={toast} />}
-                {tab === 'hoje' && <TodayTab appts={todayAppts} allAppts={appts} services={services} getSvc={getSvc} onUpdate={updateStatus} onAdd={addAppt} clients={clients} />}
-                {tab === 'agenda' && <CalendarTab appts={appts} getSvc={getSvc} onUpdate={updateStatus} onAdd={addAppt} allAppts={appts} services={services} clients={clients} />}
-                {tab === 'relatorio' && <ReportTab appts={appts} services={services} getSvc={getSvc} />}
-                {tab === 'clientes' && <ClientsTab clients={clients} appts={appts} getSvc={getSvc} onAdd={addClient} toast={toast} />}
-                {tab === 'servicos' && <ServicesTab services={services} setSvcs={setSvcs} toast={toast} />}
-              </div>
-            )}
-          </main>
+              {loading ? (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '80vh', gap: 14, flexDirection: 'column' }}>
+                  <Spinner sz={40} />
+                  <p style={{ color: '#a8a29e', fontSize: 13 }}>Carregando dados...</p>
+                </div>
+              ) : (
+                <div className="page-wrap fu">
+                  {tab === 'dashboard' && <DashTab appts={appts} getSvc={getSvc} today={today} toast={toast} />}
+                  {tab === 'hoje' && <TodayTab appts={todayAppts} allAppts={appts} services={services} getSvc={getSvc} onUpdate={updateStatus} onAdd={addAppt} clients={clients} />}
+                  {tab === 'agenda' && <CalendarTab appts={appts} getSvc={getSvc} onUpdate={updateStatus} onAdd={addAppt} allAppts={appts} services={services} clients={clients} />}
+                  {tab === 'relatorio' && <ReportTab appts={appts} services={services} getSvc={getSvc} />}
+                  {tab === 'clientes' && <ClientsTab clients={clients} appts={appts} getSvc={getSvc} onAdd={addClient} toast={toast} />}
+                  {tab === 'servicos' && <ServicesTab services={services} setSvcs={setSvcs} toast={toast} />}
+                </div>
+              )}
+            </main>
+          </div>
+
+          {/* ── BOTTOM NAV (mobile only) ── */}
+          {isMob && (
+            <nav style={{
+              position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 200,
+              background: '#12100e',
+              borderTop: '1px solid #1c1917',
+              display: 'flex',
+              paddingBottom: 'env(safe-area-inset-bottom,0px)',
+            }}>
+              {MOB_NAV.map(n => {
+                const isActive = tab === n.id;
+                return (
+                  <button key={n.id} onClick={() => setTab(n.id)} style={{
+                    flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                    gap: 3, padding: '10px 2px 8px',
+                    background: 'transparent', border: 'none', cursor: 'pointer',
+                    position: 'relative',
+                  }}>
+                    {/* Badge pendentes */}
+                    {n.id === 'hoje' && pending.length > 0 && (
+                      <span style={{
+                        position: 'absolute', top: 6, right: 'calc(50% - 16px)',
+                        background: '#d63371', color: '#fff',
+                        fontSize: 8, fontWeight: 800,
+                        minWidth: 16, height: 16, borderRadius: 8,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        border: '2px solid #12100e',
+                      }}>{pending.length}</span>
+                    )}
+                    <span style={{ fontSize: 20, lineHeight: 1 }}>{n.emoji}</span>
+                    <span style={{
+                      fontSize: 9, fontWeight: isActive ? 700 : 400,
+                      color: isActive ? '#d63371' : '#52525b',
+                      letterSpacing: '.01em',
+                      transition: 'color .15s',
+                    }}>{n.label}</span>
+                    {isActive && (
+                      <span style={{
+                        position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)',
+                        width: 20, height: 2, borderRadius: 2, background: '#d63371',
+                      }} />
+                    )}
+                  </button>
+                );
+              })}
+            </nav>
+          )}
         </div>
       );
     }
