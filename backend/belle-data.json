@@ -1,0 +1,65 @@
+{
+  "services": [
+    {
+      "id": "s1",
+      "name": "Manicure Simples",
+      "icon": "🌸",
+      "duration": 40,
+      "price": 45,
+      "active": 1
+    },
+    {
+      "id": "s2",
+      "name": "Pedicure Completa",
+      "icon": "🦶",
+      "duration": 50,
+      "price": 60,
+      "active": 1
+    },
+    {
+      "id": "s3",
+      "name": "Gel Alongado",
+      "icon": "💅",
+      "duration": 90,
+      "price": 120,
+      "active": 1
+    },
+    {
+      "id": "s4",
+      "name": "Esmaltação em Gel",
+      "icon": "✨",
+      "duration": 60,
+      "price": 80,
+      "active": 1
+    },
+    {
+      "id": "s5",
+      "name": "Combo Mani + Pedi",
+      "icon": "👑",
+      "duration": 90,
+      "price": 95,
+      "active": 1
+    }
+  ],
+  "clients": [],
+  "appointments": [
+    {
+      "id": "ammqio3kijkyl7",
+      "client_id": "ub278kxml",
+      "clientName": "Maria",
+      "clientPhone": "(17) 97602-4884",
+      "serviceId": "s3",
+      "serviceName": "Gel Alongado",
+      "serviceIcon": "💅",
+      "servicePrice": 120,
+      "serviceDuration": 90,
+      "date": "2026-03-14",
+      "time": "13:30",
+      "status": "done",
+      "reminded_day": false,
+      "reminded_hour": false,
+      "created_at": "2026-03-14T16:04:59.538Z",
+      "updated_at": "2026-03-14T16:06:40.642Z"
+    }
+  ]
+}
