@@ -225,7 +225,14 @@ const SEED_APPTS=()=>{
 // ── Configuração ─────────────────────────────────────────
 // Troque para a URL do seu servidor quando rodar o backend:
 // const BACKEND_URL = 'http://localhost:3001';
-const BACKEND_URL = null; // null = modo demo (localStorage)
+// Auto-detecta o backend:
+// - Se abrir via http://localhost:3001 → usa o servidor Node.js (WhatsApp ativo)
+// - Se abrir direto no navegador (file://) → modo demo com localStorage
+const BACKEND_URL = (
+  window.location.protocol !== 'file:' &&
+  window.location.hostname === 'localhost' &&
+  window.location.port === '3001'
+) ? window.location.origin : null;
 
 // ── Cliente HTTP ─────────────────────────────────────────
 async function http(method, path, body) {

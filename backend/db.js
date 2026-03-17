@@ -1,176 +1,207 @@
-// ─────────────────────────────────────────────────────────
-//  db.js — Banco de dados em JSON puro (sem compilação!)
-//  Usa apenas o módulo 'fs' nativo do Node.js
-//  Dados salvos em: belle-data.json
-// ─────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
+//  db.js — Banco de dados em memória + persistência em JSON
+//
+//  Estratégia eficiente:
+//  - Dados ficam em memória (acesso instantâneo)
+//  - Salvos em disco só quando há mudança
+//  - Backup automático a cada hora
+// ═══════════════════════════════════════════════════════════
+'use strict';
+
 const fs   = require('fs');
 const path = require('path');
 
-const FILE = path.join(__dirname, 'belle-data.json');
+const FILE        = path.join(__dirname, 'belle-data.json');
+const BACKUP_FILE = path.join(__dirname, 'belle-data.backup.json');
 
-// ── Estrutura inicial do banco ───────────────────────────
-const EMPTY_DB = {
-  services: [
-    { id:'s1', name:'Manicure Simples',   icon:'🌸', duration:40, price:45,  active:1 },
-    { id:'s2', name:'Pedicure Completa',  icon:'🦶', duration:50, price:60,  active:1 },
-    { id:'s3', name:'Gel Alongado',       icon:'💅', duration:90, price:120, active:1 },
-    { id:'s4', name:'Esmaltação em Gel',  icon:'✨', duration:60, price:80,  active:1 },
-    { id:'s5', name:'Combo Mani + Pedi',  icon:'👑', duration:90, price:95,  active:1 },
-  ],
-  clients:      [],
-  appointments: [],
-};
+// ── Seed de serviços padrão ─────────────────────────────────
+const DEFAULT_SERVICES = [
+  { id:'s1', name:'Manicure Simples',   icon:'🌸', duration:40,  price:45,  active:true },
+  { id:'s2', name:'Pedicure Completa',  icon:'🦶', duration:50,  price:60,  active:true },
+  { id:'s3', name:'Gel Alongado',       icon:'💅', duration:90,  price:120, active:true },
+  { id:'s4', name:'Esmaltação em Gel',  icon:'✨', duration:60,  price:80,  active:true },
+  { id:'s5', name:'Combo Mani + Pedi',  icon:'👑', duration:90,  price:95,  active:true },
+];
 
-// ── Carrega o banco do disco ──────────────────────────────
-function load() {
+// ── Helpers ─────────────────────────────────────────────────
+const uid  = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const now  = () => new Date().toISOString();
+const pad  = n  => String(n).padStart(2, '0');
+
+// ── Carrega banco do disco na inicialização ──────────────────
+function loadFromDisk() {
   try {
     if (fs.existsSync(FILE)) {
-      return JSON.parse(fs.readFileSync(FILE, 'utf8'));
+      const raw = fs.readFileSync(FILE, 'utf8');
+      const data = JSON.parse(raw);
+      console.log(`📂 Banco carregado: ${data.appointments?.length || 0} agendamentos, ${data.clients?.length || 0} clientes.`);
+      return data;
     }
   } catch (e) {
-    console.warn('⚠️  Erro ao carregar banco, recriando...', e.message);
+    console.warn('⚠️  Erro ao ler banco, iniciando do zero:', e.message);
+    // Tenta carregar o backup
+    try {
+      if (fs.existsSync(BACKUP_FILE)) {
+        const raw = fs.readFileSync(BACKUP_FILE, 'utf8');
+        console.log('♻️  Banco restaurado do backup!');
+        return JSON.parse(raw);
+      }
+    } catch (_) {}
   }
-  return JSON.parse(JSON.stringify(EMPTY_DB)); // deep clone
+  console.log('🌱 Banco novo criado com serviços padrão.');
+  return { services: DEFAULT_SERVICES, clients: [], appointments: [] };
 }
 
-// ── Salva o banco no disco ────────────────────────────────
-function save(data) {
-  fs.writeFileSync(FILE, JSON.stringify(data, null, 2), 'utf8');
+// ── Estado global em memória ─────────────────────────────────
+const _db = loadFromDisk();
+
+// ── Salva no disco (com backup automático) ───────────────────
+function persist() {
+  try {
+    const json = JSON.stringify(_db, null, 2);
+    // Salva arquivo principal
+    fs.writeFileSync(FILE, json, 'utf8');
+  } catch (e) {
+    console.error('❌ Erro ao salvar banco:', e.message);
+  }
 }
 
-// ── Gera ID único ─────────────────────────────────────────
-function uid() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-}
+// Backup a cada 1 hora
+setInterval(() => {
+  try {
+    if (fs.existsSync(FILE)) {
+      fs.copyFileSync(FILE, BACKUP_FILE);
+    }
+  } catch (e) {
+    console.warn('⚠️  Erro no backup:', e.message);
+  }
+}, 60 * 60 * 1000);
 
-// ── Retorna data/hora atual em ISO ────────────────────────
-function now() {
-  return new Date().toISOString();
-}
-
-// ══════════════════════════════════════════════════════════
-//  API do banco — idêntica ao que o server.js usa
-// ══════════════════════════════════════════════════════════
-
+// ═══════════════════════════════════════════════════════════
+//  API DO BANCO
+// ═══════════════════════════════════════════════════════════
 const DB = {
 
-  // ── SERVICES ──────────────────────────────────────────
+  // ── SERVICES ─────────────────────────────────────────────
 
   getServices() {
-    const data = load();
-    return data.services.filter(s => s.active);
+    return _db.services.filter(s => s.active);
   },
 
-  updateService(id, patch) {
-    const data = load();
-    data.services = data.services.map(s =>
-      s.id === id ? { ...s, ...patch } : s
-    );
-    save(data);
-    return data.services;
+  updateService(id, { name, icon, duration, price }) {
+    const svc = _db.services.find(s => s.id === id);
+    if (!svc) throw new Error(`Serviço ${id} não encontrado`);
+    if (name)                  svc.name     = String(name).trim();
+    if (icon)                  svc.icon     = String(icon).trim();
+    if (duration !== undefined) svc.duration = Number(duration);
+    if (price    !== undefined) svc.price    = Number(price);
+    persist();
+    return _db.services;
   },
 
-  // ── CLIENTS ───────────────────────────────────────────
+  // ── CLIENTS ───────────────────────────────────────────────
 
   getClients() {
-    const data = load();
-    return [...data.clients].sort((a, b) => a.name.localeCompare(b.name));
+    return [..._db.clients].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
   },
 
-  createClient({ name, phone, email, notes }) {
-    if (!name?.trim()) throw new Error('Nome obrigatório');
-    if (!phone?.trim()) throw new Error('Telefone obrigatório');
-    const data   = load();
-    const client = { id: 'c' + uid(), name: name.trim(), phone: phone.trim(), email: email || '', notes: notes || '', created_at: now() };
-    data.clients.push(client);
-    save(data);
+  createClient({ name, phone, email = '', notes = '' }) {
+    name  = name?.trim();
+    phone = phone?.trim();
+    if (!name)  throw new Error('Nome é obrigatório');
+    if (!phone) throw new Error('Telefone é obrigatório');
+
+    const client = { id: 'c' + uid(), name, phone, email, notes, created_at: now() };
+    _db.clients.push(client);
+    persist();
     return client;
   },
 
   updateClient(id, patch) {
-    const data = load();
-    const idx  = data.clients.findIndex(c => c.id === id);
+    const idx = _db.clients.findIndex(c => c.id === id);
     if (idx === -1) throw new Error('Cliente não encontrada');
-    data.clients[idx] = { ...data.clients[idx], ...patch, updated_at: now() };
-    save(data);
-    return data.clients[idx];
+    const allowed = ['name', 'phone', 'email', 'notes'];
+    allowed.forEach(k => { if (patch[k] !== undefined) _db.clients[idx][k] = patch[k]; });
+    _db.clients[idx].updated_at = now();
+    persist();
+    return _db.clients[idx];
   },
 
-  // ── APPOINTMENTS ──────────────────────────────────────
+  // ── APPOINTMENTS ──────────────────────────────────────────
 
   getAppointments({ clientId, date, status } = {}) {
-    const data = load();
-    let list   = data.appointments;
+    let list = _db.appointments;
     if (clientId) list = list.filter(a => a.client_id === clientId);
-    if (date)     list = list.filter(a => a.date === date);
-    if (status)   list = list.filter(a => a.status === status);
-    return list.sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+    if (date)     list = list.filter(a => a.date      === date);
+    if (status)   list = list.filter(a => a.status    === status);
+    // Ordena por data e hora (mais recente primeiro quando passado)
+    return [...list].sort((a, b) =>
+      a.date.localeCompare(b.date) || a.time.localeCompare(b.time)
+    );
   },
 
-  createAppointment({ clientId, clientName, clientPhone, serviceId, date, time, notes, status }) {
-    const data = load();
+  createAppointment({ clientId, clientName, clientPhone, serviceId, date, time, notes = '', status = 'pending' }) {
+    if (!date || !time || !serviceId) throw new Error('date, time e serviceId são obrigatórios');
 
-    // Verifica conflito de horário
-    const conflict = data.appointments.find(
+    // Checa conflito de horário
+    const busy = _db.appointments.find(
       a => a.date === date && a.time === time && a.status !== 'cancelled'
     );
-    if (conflict) throw new Error('Horário já ocupado');
+    if (busy) throw new Error('Horário já ocupado');
 
-    const svc   = data.services.find(s => s.id === serviceId) || {};
-    const appt  = {
-      id:            'a' + uid(),
-      client_id:     clientId  || null,
-      clientName:    clientName || 'Cliente',
-      clientPhone:   clientPhone || '',
+    const svc  = _db.services.find(s => s.id === serviceId) || {};
+    const appt = {
+      id:              'a' + uid(),
+      client_id:       clientId    || null,
+      clientName:      clientName  || 'Cliente',
+      clientPhone:     clientPhone || '',
       serviceId,
-      serviceName:   svc.name     || '',
-      serviceIcon:   svc.icon     || '',
-      servicePrice:  svc.price    || 0,
+      serviceName:     svc.name     || '',
+      serviceIcon:     svc.icon     || '',
+      servicePrice:    svc.price    || 0,
       serviceDuration: svc.duration || 0,
       date,
       time,
-      status:        status || 'pending',
-      notes:         notes  || '',
-      reminded_day:  false,
-      reminded_hour: false,
-      created_at:    now(),
+      status,
+      notes,
+      reminded_day:    false,
+      reminded_hour:   false,
+      created_at:      now(),
     };
 
-    data.appointments.push(appt);
-    save(data);
+    _db.appointments.push(appt);
+    persist();
     return appt;
   },
 
   updateAppointment(id, patch) {
-    const data = load();
-    const idx  = data.appointments.findIndex(a => a.id === id);
+    const idx = _db.appointments.findIndex(a => a.id === id);
     if (idx === -1) throw new Error('Agendamento não encontrado');
 
-    const old  = data.appointments[idx];
-    data.appointments[idx] = { ...old, ...patch, updated_at: now() };
-    save(data);
-    return { old, updated: data.appointments[idx] };
+    const before = { ..._db.appointments[idx] };
+    const allowed = ['status', 'notes', 'date', 'time', 'clientName', 'clientPhone', 'serviceId'];
+    allowed.forEach(k => { if (patch[k] !== undefined) _db.appointments[idx][k] = patch[k]; });
+    _db.appointments[idx].updated_at = now();
+    persist();
+
+    return { before, after: _db.appointments[idx] };
   },
 
-  // Retorna agendamentos confirmados a partir de uma data (para o scheduler)
+  // Para o scheduler — agendamentos confirmados a partir de hoje
   getConfirmedFrom(dateStr) {
-    const data = load();
-    return data.appointments.filter(
+    return _db.appointments.filter(
       a => a.status === 'confirmed' && a.date >= dateStr
     );
   },
 
-  markRemindedDay(id) {
-    const data = load();
-    const idx  = data.appointments.findIndex(a => a.id === id);
-    if (idx !== -1) { data.appointments[idx].reminded_day = true; save(data); }
-  },
-
-  markRemindedHour(id) {
-    const data = load();
-    const idx  = data.appointments.findIndex(a => a.id === id);
-    if (idx !== -1) { data.appointments[idx].reminded_hour = true; save(data); }
+  markReminded(id, type) {
+    // type: 'day' | 'hour'
+    const appt = _db.appointments.find(a => a.id === id);
+    if (appt) {
+      appt[`reminded_${type}`] = true;
+      persist();
+    }
   },
 };
 
-module.exports = { DB, uid, now };
+module.exports = { DB };

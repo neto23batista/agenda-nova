@@ -1,36 +1,46 @@
 @echo off
+chcp 65001 >nul
 echo.
-echo  Configurando Belle Studio...
+echo  ==========================================
+echo   Configurando Belle Studio - agenda-nova
+echo  ==========================================
 echo.
 
-REM Cria pasta public se não existir
-if not exist "public" mkdir public
-
-REM Copia o HTML para public/index.html se ele existir no diretório pai
-if exist "..\belle-studio-v3.html" (
-    copy "..\belle-studio-v3.html" "public\index.html" >nul
-    echo  [OK] belle-studio-v3.html copiado para public\index.html
-) else (
-    echo  [AVISO] Coloque o belle-studio-v3.html dentro da pasta public\ e renomeie para index.html
+REM Cria pasta public
+if not exist "public" (
+    mkdir public
+    echo  [OK] Pasta public\ criada.
 )
 
-REM Cria .env a partir do exemplo se não existir
+REM Copia .env.example para .env se nao existir
 if not exist ".env" (
     copy ".env.example" ".env" >nul
-    echo  [OK] .env criado - abra e configure seu WhatsApp
+    echo  [OK] Arquivo .env criado.
+    echo  [!]  Abra o .env e configure o OWNER_WHATSAPP e a Evolution API.
 ) else (
-    echo  [OK] .env ja existe
+    echo  [OK] .env ja existe.
 )
 
-REM Instala dependencias
+REM Procura o HTML no diretorio pai (agenda-nova/)
+if exist "..\belle-studio-v3.html" (
+    copy "..\belle-studio-v3.html" "public\index.html" >nul
+    echo  [OK] Frontend copiado para public\index.html
+) else (
+    echo  [!]  Nao encontrei belle-studio-v3.html na pasta acima.
+    echo       Coloque o HTML em: public\index.html manualmente.
+)
+
 echo.
-echo  Instalando dependencias...
-npm install
+echo  Instalando dependencias Node.js...
+echo  (Isso pode demorar 1-2 minutos na primeira vez)
+echo.
+call npm install
 
 echo.
 echo  ==========================================
-echo   Pronto! Para iniciar o servidor:
-echo   npm start
+echo   Pronto! Para iniciar:
+echo.
+echo     npm start
 echo.
 echo   Acesse: http://localhost:3001
 echo  ==========================================
