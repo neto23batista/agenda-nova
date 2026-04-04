@@ -25,10 +25,11 @@ function tomorrowStr() {
   return d.toISOString().split('T')[0];
 }
 
-// Retorna os dois próximos slots (HH:00 e HH:30) a partir de agora + 1h
-function getSlotsInOneHour() {
-  const h = new Date().getHours() + 1;
-  return [`${pad(h)}:00`, `${pad(h)}:30`];
+function isWithinOneHour(appt) {
+  const now   = new Date();
+  const apptD = new Date(`${appt.date}T${appt.time}:00`);
+  const diff  = apptD.getTime() - now.getTime();
+  return diff > 0 && diff <= 60 * 60 * 1000; // até 1h
 }
 
 // ── Executa a verificação ────────────────────────────────────
@@ -38,7 +39,6 @@ async function runCheck() {
 
   const today    = todayStr();
   const tomorrow = tomorrowStr();
-  const slots1h  = getSlotsInOneHour();
   let   sent     = 0;
 
   try {
@@ -55,8 +55,8 @@ async function runCheck() {
       }
 
       // ── H-1: lembrete 1 hora antes ────────────────────────
-      if (appt.date === today && !appt.reminded_hour && slots1h.includes(appt.time)) {
-        console.log(`  ⏰ H-1 → ${appt.clientName} (hoje às ${appt.time})`);
+      if (!appt.reminded_hour && isWithinOneHour(appt)) {
+        console.log(`  ⏰ H-1 → ${appt.clientName} (${appt.date} às ${appt.time})`);
         await notifyReminderHour(appt);
         await notifyOwnerReminder(appt);
         DB.markReminded(appt.id, 'hour');

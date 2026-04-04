@@ -8,7 +8,7 @@ const axios  = require('axios');
 require('dotenv').config();
 
 const PROVIDER = (process.env.WHATSAPP_PROVIDER || 'evolution').toLowerCase();
-const SALON    = process.env.SALON_NAME || 'Belle Studio';
+const SALON    = process.env.SALON_NAME || 'Fernanda Silva Nail Designer';
 
 // ── Normaliza número para formato internacional ─────────────
 // Entrada:  "(11) 98888-7777"  →  Saída: "5511988887777"

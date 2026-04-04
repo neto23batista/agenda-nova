@@ -1,204 +1,485 @@
-// ═══════════════════════════════════════════════════════════
-//  db.js — Banco de dados em memória + persistência em JSON
-//
-//  Estratégia eficiente:
-//  - Dados ficam em memória (acesso instantâneo)
-//  - Salvos em disco só quando há mudança
-//  - Backup automático a cada hora
-// ═══════════════════════════════════════════════════════════
 'use strict';
 
-const fs   = require('fs');
+const fs = require('fs');
 const path = require('path');
 
-const FILE        = path.join(__dirname, 'belle-data.json');
+const FILE = path.join(__dirname, 'belle-data.json');
 const BACKUP_FILE = path.join(__dirname, 'belle-data.backup.json');
+const SINGLE_PROFESSIONAL_MODE = true;
 
-// ── Seed de serviços padrão ─────────────────────────────────
 const DEFAULT_SERVICES = [
-  { id:'s1', name:'Manicure Simples',   icon:'🌸', duration:40,  price:45,  active:true },
-  { id:'s2', name:'Pedicure Completa',  icon:'🦶', duration:50,  price:60,  active:true },
-  { id:'s3', name:'Gel Alongado',       icon:'💅', duration:90,  price:120, active:true },
-  { id:'s4', name:'Esmaltação em Gel',  icon:'✨', duration:60,  price:80,  active:true },
-  { id:'s5', name:'Combo Mani + Pedi',  icon:'👑', duration:90,  price:95,  active:true },
+  { id: 's1', name: 'Manicure Premium', icon: 'MN', duration: 40, price: 45, active: true },
+  { id: 's2', name: 'Pedicure Spa', icon: 'PD', duration: 50, price: 60, active: true },
+  { id: 's3', name: 'Gel Alongado', icon: 'GL', duration: 90, price: 120, active: true },
+  { id: 's4', name: 'Esmaltacao em Gel', icon: 'EG', duration: 60, price: 80, active: true },
+  { id: 's5', name: 'Combo Mani e Pedi', icon: 'CB', duration: 90, price: 95, active: true },
 ];
 
-// ── Helpers ─────────────────────────────────────────────────
-const uid  = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-const now  = () => new Date().toISOString();
-const pad  = n  => String(n).padStart(2, '0');
+const DEFAULT_STAFF = [
+  { id: 'p1', name: 'Profissional Principal', phone: '', color: '#df6f4b', active: true },
+];
 
-// ── Carrega banco do disco na inicialização ──────────────────
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const now = () => new Date().toISOString();
+const timeToMin = value => {
+  const [hours, minutes] = String(value || '0:0').split(':').map(Number);
+  return (hours * 60) + minutes;
+};
+const normalizePhone = value => String(value || '').replace(/\D/g, '');
+
 function loadFromDisk() {
   try {
     if (fs.existsSync(FILE)) {
       const raw = fs.readFileSync(FILE, 'utf8');
       const data = JSON.parse(raw);
-      console.log(`📂 Banco carregado: ${data.appointments?.length || 0} agendamentos, ${data.clients?.length || 0} clientes.`);
+      console.log(
+        `[db] loaded ${data.appointments?.length || 0} appointments and ${data.clients?.length || 0} clients.`,
+      );
       return data;
     }
-  } catch (e) {
-    console.warn('⚠️  Erro ao ler banco, iniciando do zero:', e.message);
-    // Tenta carregar o backup
+  } catch (error) {
+    console.warn('[db] failed to read primary file, trying backup:', error.message);
     try {
       if (fs.existsSync(BACKUP_FILE)) {
         const raw = fs.readFileSync(BACKUP_FILE, 'utf8');
-        console.log('♻️  Banco restaurado do backup!');
+        console.log('[db] restored from backup file.');
         return JSON.parse(raw);
       }
-    } catch (_) {}
+    } catch (backupError) {
+      console.warn('[db] failed to read backup file:', backupError.message);
+    }
   }
-  console.log('🌱 Banco novo criado com serviços padrão.');
-  return { services: DEFAULT_SERVICES, clients: [], appointments: [] };
+
+  console.log('[db] creating a new database with default services.');
+  return {
+    services: DEFAULT_SERVICES,
+    staff: DEFAULT_STAFF,
+    clients: [],
+    appointments: [],
+    blocks: [],
+  };
 }
 
-// ── Estado global em memória ─────────────────────────────────
-const _db = loadFromDisk();
+const db = loadFromDisk();
+db.services = Array.isArray(db.services) && db.services.length ? db.services : DEFAULT_SERVICES;
+db.staff = Array.isArray(db.staff) && db.staff.length ? db.staff : DEFAULT_STAFF;
+db.clients = Array.isArray(db.clients) ? db.clients : [];
+db.appointments = Array.isArray(db.appointments) ? db.appointments : [];
+db.blocks = Array.isArray(db.blocks) ? db.blocks : [];
 
-// ── Salva no disco (com backup automático) ───────────────────
+function enforceSingleProfessionalMode() {
+  if (!SINGLE_PROFESSIONAL_MODE) return false;
+  if (!Array.isArray(db.staff) || !db.staff.length) {
+    db.staff = [...DEFAULT_STAFF];
+    return true;
+  }
+
+  let changed = false;
+  let activeIndex = db.staff.findIndex(item => item.active !== false);
+  if (activeIndex === -1) activeIndex = 0;
+
+  db.staff = db.staff.map((item, index) => {
+    const next = { ...item, active: index === activeIndex };
+    if (!!item.active !== next.active) changed = true;
+    return next;
+  });
+
+  return changed;
+}
+
 function persist() {
   try {
-    const json = JSON.stringify(_db, null, 2);
-    // Salva arquivo principal
-    fs.writeFileSync(FILE, json, 'utf8');
-  } catch (e) {
-    console.error('❌ Erro ao salvar banco:', e.message);
+    fs.writeFileSync(FILE, JSON.stringify(db, null, 2), 'utf8');
+  } catch (error) {
+    console.error('[db] failed to persist database:', error.message);
   }
 }
 
-// Backup a cada 1 hora
 setInterval(() => {
   try {
     if (fs.existsSync(FILE)) {
       fs.copyFileSync(FILE, BACKUP_FILE);
     }
-  } catch (e) {
-    console.warn('⚠️  Erro no backup:', e.message);
+  } catch (error) {
+    console.warn('[db] failed to create backup:', error.message);
   }
 }, 60 * 60 * 1000);
 
-// ═══════════════════════════════════════════════════════════
-//  API DO BANCO
-// ═══════════════════════════════════════════════════════════
+if (enforceSingleProfessionalMode()) {
+  persist();
+}
+
+const setPrimaryStaff = id => {
+  db.staff.forEach(item => {
+    item.active = item.id === id;
+    item.updated_at = now();
+  });
+};
+
 const DB = {
-
-  // ── SERVICES ─────────────────────────────────────────────
-
-  getServices() {
-    return _db.services.filter(s => s.active);
+  getServices(includeInactive = false) {
+    const list = includeInactive ? db.services : db.services.filter(service => service.active !== false);
+    return [...list].sort((left, right) => left.name.localeCompare(right.name, 'pt-BR'));
   },
 
-  updateService(id, { name, icon, duration, price }) {
-    const svc = _db.services.find(s => s.id === id);
-    if (!svc) throw new Error(`Serviço ${id} não encontrado`);
-    if (name)                  svc.name     = String(name).trim();
-    if (icon)                  svc.icon     = String(icon).trim();
-    if (duration !== undefined) svc.duration = Number(duration);
-    if (price    !== undefined) svc.price    = Number(price);
+  createService({ name, icon = '', duration, price, active = true }) {
+    if (!name?.trim()) throw new Error('Nome do servico e obrigatorio');
+
+    const service = {
+      id: 's' + uid(),
+      name: name.trim(),
+      icon: String(icon || '').trim().slice(0, 8),
+      duration: Number(duration) || 0,
+      price: Number(price) || 0,
+      active: !!active,
+      created_at: now(),
+    };
+
+    db.services.push(service);
     persist();
-    return _db.services;
+    return service;
   },
 
-  // ── CLIENTS ───────────────────────────────────────────────
+  updateService(id, patch) {
+    const service = db.services.find(item => item.id === id);
+    if (!service) throw new Error(`Servico ${id} nao encontrado`);
+
+    if (patch.name !== undefined) service.name = String(patch.name).trim();
+    if (patch.icon !== undefined) service.icon = String(patch.icon).trim();
+    if (patch.duration !== undefined) service.duration = Number(patch.duration);
+    if (patch.price !== undefined) service.price = Number(patch.price);
+    if (patch.active !== undefined) service.active = !!patch.active;
+    service.updated_at = now();
+
+    persist();
+    return service;
+  },
+
+  getStaff(includeInactive = false) {
+    const list = includeInactive ? db.staff : db.staff.filter(item => item.active !== false);
+    return [...list].sort((left, right) => left.name.localeCompare(right.name, 'pt-BR'));
+  },
+
+  createStaff({ name, phone = '', color = '#df6f4b', active = true }) {
+    if (!name?.trim()) throw new Error('Nome da profissional e obrigatorio');
+
+    const shouldActivate = db.staff.length === 0 ? true : !!active;
+    if (SINGLE_PROFESSIONAL_MODE && shouldActivate) {
+      setPrimaryStaff('__none__');
+    }
+
+    const staff = {
+      id: 'p' + uid(),
+      name: name.trim(),
+      phone,
+      color,
+      active: shouldActivate,
+      created_at: now(),
+    };
+
+    db.staff.push(staff);
+    if (SINGLE_PROFESSIONAL_MODE && shouldActivate) {
+      setPrimaryStaff(staff.id);
+    }
+    persist();
+    return staff;
+  },
+
+  updateStaff(id, patch) {
+    const staff = db.staff.find(item => item.id === id);
+    if (!staff) throw new Error('Profissional nao encontrada');
+
+    ['name', 'phone', 'color', 'active'].forEach(key => {
+      if (patch[key] !== undefined) {
+        staff[key] = patch[key];
+      }
+    });
+
+    if (SINGLE_PROFESSIONAL_MODE) {
+      if (patch.active === true) {
+        setPrimaryStaff(staff.id);
+      } else if (patch.active === false) {
+        const fallback = db.staff.find(item => item.id !== id) || staff;
+        setPrimaryStaff(fallback.id);
+      }
+    }
+    staff.updated_at = now();
+
+    persist();
+    return staff;
+  },
 
   getClients() {
-    return [..._db.clients].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+    return [...db.clients].sort((left, right) => left.name.localeCompare(right.name, 'pt-BR'));
+  },
+
+  findClientByPhone(phone) {
+    const normalized = normalizePhone(phone);
+    if (!normalized) return null;
+    return db.clients.find(client => normalizePhone(client.phone) === normalized) || null;
+  },
+
+  createOrGetClient({ name, phone }) {
+    const existing = this.findClientByPhone(phone);
+    if (existing) {
+      if (name?.trim() && existing.name !== name.trim()) {
+        existing.name = name.trim();
+        existing.updated_at = now();
+        persist();
+      }
+      return existing;
+    }
+
+    return this.createClient({
+      name,
+      phone,
+      email: '',
+      notes: '',
+    });
   },
 
   createClient({ name, phone, email = '', notes = '' }) {
-    name  = name?.trim();
-    phone = phone?.trim();
-    if (!name)  throw new Error('Nome é obrigatório');
-    if (!phone) throw new Error('Telefone é obrigatório');
+    if (!name?.trim()) throw new Error('Nome e obrigatorio');
+    if (!phone?.trim()) throw new Error('Telefone e obrigatorio');
 
-    const client = { id: 'c' + uid(), name, phone, email, notes, created_at: now() };
-    _db.clients.push(client);
+    const client = {
+      id: 'c' + uid(),
+      name: name.trim(),
+      phone: phone.trim(),
+      email,
+      notes,
+      created_at: now(),
+    };
+
+    db.clients.push(client);
     persist();
     return client;
   },
 
   updateClient(id, patch) {
-    const idx = _db.clients.findIndex(c => c.id === id);
-    if (idx === -1) throw new Error('Cliente não encontrada');
-    const allowed = ['name', 'phone', 'email', 'notes'];
-    allowed.forEach(k => { if (patch[k] !== undefined) _db.clients[idx][k] = patch[k]; });
-    _db.clients[idx].updated_at = now();
+    const client = db.clients.find(item => item.id === id);
+    if (!client) throw new Error('Cliente nao encontrado');
+
+    ['name', 'phone', 'email', 'notes'].forEach(key => {
+      if (patch[key] !== undefined) {
+        client[key] = patch[key];
+      }
+    });
+    client.updated_at = now();
+
     persist();
-    return _db.clients[idx];
+    return client;
   },
 
-  // ── APPOINTMENTS ──────────────────────────────────────────
-
-  getAppointments({ clientId, date, status } = {}) {
-    let list = _db.appointments;
-    if (clientId) list = list.filter(a => a.client_id === clientId);
-    if (date)     list = list.filter(a => a.date      === date);
-    if (status)   list = list.filter(a => a.status    === status);
-    // Ordena por data e hora (mais recente primeiro quando passado)
-    return [...list].sort((a, b) =>
-      a.date.localeCompare(b.date) || a.time.localeCompare(b.time)
-    );
+  getBlocks(staffId) {
+    return db.blocks.filter(block => !staffId || block.staffId === staffId);
   },
 
-  createAppointment({ clientId, clientName, clientPhone, serviceId, date, time, notes = '', status = 'pending' }) {
-    if (!date || !time || !serviceId) throw new Error('date, time e serviceId são obrigatórios');
+  createBlock({ staffId, date, start, end, reason = '' }) {
+    if (!staffId || !date || !start || !end) {
+      throw new Error('staffId, date, start e end sao obrigatorios');
+    }
 
-    // Checa conflito de horário
-    const busy = _db.appointments.find(
-      a => a.date === date && a.time === time && a.status !== 'cancelled'
+    const staff = db.staff.find(item => item.id === staffId && item.active !== false);
+    if (!staff) throw new Error('Profissional invalida');
+
+    const startMin = timeToMin(start);
+    const endMin = timeToMin(end);
+    if (endMin <= startMin) throw new Error('Horario invalido');
+
+    const conflict = db.blocks.find(block =>
+      block.staffId === staffId &&
+      block.date === date &&
+      !(timeToMin(block.end) <= startMin || timeToMin(block.start) >= endMin)
     );
-    if (busy) throw new Error('Horário já ocupado');
 
-    const svc  = _db.services.find(s => s.id === serviceId) || {};
-    const appt = {
-      id:              'a' + uid(),
-      client_id:       clientId    || null,
-      clientName:      clientName  || 'Cliente',
-      clientPhone:     clientPhone || '',
+    if (conflict) throw new Error('Ja existe bloqueio neste periodo');
+
+    const block = {
+      id: 'b' + uid(),
+      staffId,
+      date,
+      start,
+      end,
+      reason,
+      created_at: now(),
+    };
+
+    db.blocks.push(block);
+    persist();
+    return block;
+  },
+
+  deleteBlock(id) {
+    const index = db.blocks.findIndex(block => block.id === id);
+    if (index > -1) {
+      db.blocks.splice(index, 1);
+      persist();
+    }
+  },
+
+  getAppointments({ clientId, date, status, staffId } = {}) {
+    let list = db.appointments;
+
+    if (clientId) {
+      list = list.filter(item => item.client_id === clientId || item.clientId === clientId);
+    }
+    if (staffId) {
+      list = list.filter(item => item.staffId === staffId);
+    }
+    if (date) {
+      list = list.filter(item => item.date === date);
+    }
+    if (status) {
+      list = list.filter(item => item.status === status);
+    }
+
+    return [...list].sort((left, right) => left.date.localeCompare(right.date) || left.time.localeCompare(right.time));
+  },
+
+  createAppointment({
+    clientId,
+    clientName,
+    clientPhone,
+    serviceId,
+    staffId,
+    date,
+    time,
+    notes = '',
+    status = 'pending',
+    paymentStatus = 'unpaid',
+    paymentMethod = '',
+  }) {
+    if (!date || !time || !serviceId) throw new Error('date, time e serviceId sao obrigatorios');
+
+    const service = db.services.find(item => item.id === serviceId);
+    if (!service) throw new Error('Servico nao encontrado');
+    if (service.active === false) throw new Error('Servico inativo');
+
+    const staff = staffId
+      ? db.staff.find(item => item.id === staffId && item.active !== false)
+      : db.staff.find(item => item.active !== false);
+    if (!staff) throw new Error('Profissional nao disponivel');
+
+    const slotStart = timeToMin(time);
+    const slotEnd = slotStart + (service.duration || 60);
+
+    const busy = db.appointments.find(item =>
+      item.staffId === staff.id &&
+      item.date === date &&
+      item.status !== 'cancelled' &&
+      !((timeToMin(item.time) + (item.serviceDuration || 0)) <= slotStart || timeToMin(item.time) >= slotEnd)
+    );
+    if (busy) throw new Error('Horario ja ocupado');
+
+    const blocked = db.blocks.find(block =>
+      block.staffId === staff.id &&
+      block.date === date &&
+      !(timeToMin(block.end) <= slotStart || timeToMin(block.start) >= slotEnd)
+    );
+    if (blocked) throw new Error('Horario bloqueado para esta profissional');
+
+    const appointment = {
+      id: 'a' + uid(),
+      client_id: clientId || null,
+      clientName: clientName || 'Cliente',
+      clientPhone: clientPhone || '',
+      staffId: staff.id,
+      staffName: staff.name || '',
+      staffColor: staff.color || '',
       serviceId,
-      serviceName:     svc.name     || '',
-      serviceIcon:     svc.icon     || '',
-      servicePrice:    svc.price    || 0,
-      serviceDuration: svc.duration || 0,
+      serviceName: service.name || '',
+      serviceIcon: service.icon || '',
+      servicePrice: service.price || 0,
+      serviceDuration: service.duration || 0,
       date,
       time,
       status,
+      paymentStatus,
+      paymentMethod,
       notes,
-      reminded_day:    false,
-      reminded_hour:   false,
-      created_at:      now(),
+      reminded_day: false,
+      reminded_hour: false,
+      created_at: now(),
     };
 
-    _db.appointments.push(appt);
+    db.appointments.push(appointment);
     persist();
-    return appt;
+    return appointment;
   },
 
   updateAppointment(id, patch) {
-    const idx = _db.appointments.findIndex(a => a.id === id);
-    if (idx === -1) throw new Error('Agendamento não encontrado');
+    const appointment = db.appointments.find(item => item.id === id);
+    if (!appointment) throw new Error('Agendamento nao encontrado');
 
-    const before = { ..._db.appointments[idx] };
-    const allowed = ['status', 'notes', 'date', 'time', 'clientName', 'clientPhone', 'serviceId'];
-    allowed.forEach(k => { if (patch[k] !== undefined) _db.appointments[idx][k] = patch[k]; });
-    _db.appointments[idx].updated_at = now();
+    const before = { ...appointment };
+
+    if (patch.serviceId !== undefined) {
+      const service = db.services.find(item => item.id === patch.serviceId);
+      if (!service) throw new Error('Servico nao encontrado');
+
+      appointment.serviceId = service.id;
+      appointment.serviceName = service.name || '';
+      appointment.serviceIcon = service.icon || '';
+      appointment.servicePrice = service.price || 0;
+      appointment.serviceDuration = service.duration || 0;
+    }
+
+    if (patch.staffId !== undefined) {
+      const staff = db.staff.find(item => item.id === patch.staffId && item.active !== false);
+      if (!staff) throw new Error('Profissional nao disponivel');
+
+      appointment.staffId = staff.id;
+      appointment.staffName = staff.name || '';
+      appointment.staffColor = staff.color || '';
+    }
+
+    const nextDate = patch.date !== undefined ? patch.date : appointment.date;
+    const nextTime = patch.time !== undefined ? patch.time : appointment.time;
+    const slotStart = timeToMin(nextTime);
+    const slotEnd = slotStart + (appointment.serviceDuration || 0);
+
+    if (patch.date !== undefined || patch.time !== undefined || patch.staffId !== undefined || patch.serviceId !== undefined) {
+      const busy = db.appointments.find(item =>
+        item.id !== id &&
+        item.staffId === appointment.staffId &&
+        item.date === nextDate &&
+        item.status !== 'cancelled' &&
+        !((timeToMin(item.time) + (item.serviceDuration || 0)) <= slotStart || timeToMin(item.time) >= slotEnd)
+      );
+      if (busy) throw new Error('Horario ja ocupado');
+
+      const blocked = db.blocks.find(block =>
+        block.staffId === appointment.staffId &&
+        block.date === nextDate &&
+        !(timeToMin(block.end) <= slotStart || timeToMin(block.start) >= slotEnd)
+      );
+      if (blocked) throw new Error('Horario bloqueado para esta profissional');
+    }
+
+    if (patch.status !== undefined) appointment.status = patch.status;
+    if (patch.notes !== undefined) appointment.notes = patch.notes;
+    if (patch.paymentStatus !== undefined) appointment.paymentStatus = patch.paymentStatus;
+    if (patch.paymentMethod !== undefined) appointment.paymentMethod = patch.paymentMethod;
+    if (patch.clientName !== undefined) appointment.clientName = patch.clientName;
+    if (patch.clientPhone !== undefined) appointment.clientPhone = patch.clientPhone;
+
+    appointment.date = nextDate;
+    appointment.time = nextTime;
+    appointment.updated_at = now();
+
     persist();
-
-    return { before, after: _db.appointments[idx] };
+    return { before, after: appointment };
   },
 
-  // Para o scheduler — agendamentos confirmados a partir de hoje
   getConfirmedFrom(dateStr) {
-    return _db.appointments.filter(
-      a => a.status === 'confirmed' && a.date >= dateStr
-    );
+    return db.appointments.filter(item => item.status === 'confirmed' && item.date >= dateStr);
   },
 
   markReminded(id, type) {
-    // type: 'day' | 'hour'
-    const appt = _db.appointments.find(a => a.id === id);
-    if (appt) {
-      appt[`reminded_${type}`] = true;
+    const appointment = db.appointments.find(item => item.id === id);
+    if (appointment) {
+      appointment[`reminded_${type}`] = true;
       persist();
     }
   },

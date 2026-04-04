@@ -2,7 +2,7 @@
 chcp 65001 >nul
 echo.
 echo  ==========================================
-echo   Configurando Belle Studio - agenda-nova
+echo   Configurando Fernanda Silva Nail Designer - agenda-nova
 echo  ==========================================
 echo.
 
@@ -21,13 +21,14 @@ if not exist ".env" (
     echo  [OK] .env ja existe.
 )
 
-REM Procura o HTML no diretorio pai (agenda-nova/)
-if exist "..\belle-studio-v3.html" (
-    copy "..\belle-studio-v3.html" "public\index.html" >nul
-    echo  [OK] Frontend copiado para public\index.html
+REM O frontend atual e publicado por build em backend\public
+if exist "public\index.html" (
+    echo  [OK] Frontend ja encontrado em public\index.html
 ) else (
-    echo  [!]  Nao encontrei belle-studio-v3.html na pasta acima.
-    echo       Coloque o HTML em: public\index.html manualmente.
+    echo  [!]  Nao encontrei o frontend compilado em public\index.html
+    echo       Rode:
+    echo         cd ..\frontend ^&^& npm install ^&^& npm run build
+    echo       e depois copie o dist para backend\public.
 )
 
 echo.
