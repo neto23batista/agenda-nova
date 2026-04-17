@@ -122,21 +122,27 @@ const emptyProfessionalDraft = (): ProfessionalDraft => ({
   color: '#c26549',
 });
 
+const looksLikeSignedToken = (value: unknown): value is string => (
+  typeof value === 'string' && value.includes('.') && value.split('.').length === 2
+);
+
 const readStoredSession = (): Session | null => {
   try {
     const raw = window.localStorage.getItem(SESSION_KEY) || window.localStorage.getItem(LEGACY_SESSION_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Session;
-    if (parsed && parsed.role === 'owner' && parsed.token) {
+    if (parsed && parsed.role === 'owner' && looksLikeSignedToken(parsed.token)) {
       window.localStorage.setItem(SESSION_KEY, JSON.stringify(parsed));
       window.localStorage.removeItem(LEGACY_SESSION_KEY);
       return parsed;
     }
-    if (parsed && parsed.role === 'client' && parsed.id) {
+    if (parsed && parsed.role === 'client' && parsed.id && looksLikeSignedToken(parsed.token)) {
       window.localStorage.setItem(SESSION_KEY, JSON.stringify(parsed));
       window.localStorage.removeItem(LEGACY_SESSION_KEY);
       return parsed;
     }
+    window.localStorage.removeItem(SESSION_KEY);
+    window.localStorage.removeItem(LEGACY_SESSION_KEY);
   } catch {
     window.localStorage.removeItem(SESSION_KEY);
     window.localStorage.removeItem(LEGACY_SESSION_KEY);
@@ -396,24 +402,63 @@ const WeekBoard = ({
 const LandingPage = ({ onLogin }: { onLogin: (session: Session) => void }) => {
   const toasts = useToasts();
   const [mode, setMode] = useState<'client' | 'owner'>('client');
+  const [clientAuthMode, setClientAuthMode] = useState<'login' | 'register'>('login');
   const [clientName, setClientName] = useState('');
   const [clientPhone, setClientPhone] = useState('');
+  const [clientPassword, setClientPassword] = useState('');
+  const [clientPasswordConfirm, setClientPasswordConfirm] = useState('');
   const [ownerPassword, setOwnerPassword] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const handleClientLogin = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleClientSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+
+    if (normalizePhoneInput(clientPhone).length < 10) {
+      toasts.push('Informe um WhatsApp valido', 'error');
+      return;
+    }
+
+    if (clientAuthMode === 'register') {
+      if (!clientName.trim()) {
+        toasts.push('Informe seu nome', 'error');
+        return;
+      }
+
+      if (clientPassword.length < 4) {
+        toasts.push('Use uma senha com pelo menos 4 caracteres', 'error');
+        return;
+      }
+
+      if (clientPassword !== clientPasswordConfirm) {
+        toasts.push('As senhas nao conferem', 'error');
+        return;
+      }
+    }
+
+    if (clientAuthMode === 'login' && clientPassword.length < 4) {
+      toasts.push('Informe sua senha', 'error');
+      return;
+    }
+
     setBusy(true);
     try {
-      const client = await api.clientAccess({
-        name: clientName.trim(),
-        phone: normalizePhoneInput(clientPhone),
-      });
+      const response = clientAuthMode === 'register'
+        ? await api.registerClient({
+          name: clientName.trim(),
+          phone: normalizePhoneInput(clientPhone),
+          password: clientPassword,
+        })
+        : await api.loginClient({
+          phone: normalizePhoneInput(clientPhone),
+          password: clientPassword,
+        });
+      const client = response.client;
       const session: ClientSession = {
         role: 'client',
         id: client.id,
         name: client.name,
         phone: client.phone,
+        token: response.accessToken,
       };
       storeSession(session);
       onLogin(session);
@@ -446,62 +491,72 @@ const LandingPage = ({ onLogin }: { onLogin: (session: Session) => void }) => {
   return (
     <main className="page page-login">
       <ToastViewport items={toasts.items} onDismiss={toasts.dismiss} />
-      <section className="login-shell">
-        <article className="login-hero">
-          <span className="eyebrow">Fernanda Silva Nail Designer</span>
-          <BrandMark hero />
-          <div className="login-hero-copy">
-            <h1>Agenda online, limpa e direta.</h1>
-            <p>Cliente agenda em segundos. Gestora opera a rotina com clareza.</p>
-          </div>
-          <div className="login-minimal-grid">
-            <div className="login-minimal-item">
-              <strong>Cliente</strong>
-              <span>Nome e WhatsApp</span>
+      <section className="login-shell-simple">
+        <article className="login-card login-card-split">
+          <div className="login-intro">
+            <div className="login-brand">
+              <BrandMark />
+              <div className="login-brand-copy">
+                <h1>Agenda online.</h1>
+                <p>Cliente agenda. Gestora acompanha.</p>
+              </div>
             </div>
-            <div className="login-minimal-item">
-              <strong>Gestora</strong>
-              <span>Painel protegido</span>
-            </div>
-            <div className="login-minimal-item">
-              <strong>Agenda</strong>
-              <span>Bloqueios e encaixes</span>
-            </div>
-          </div>
-        </article>
 
-        <article className="login-panel">
-          <div className="login-panel-head">
-            <span className="eyebrow">Acesso</span>
-            <h2>{mode === 'client' ? 'Entrar para agendar' : 'Entrar no painel'}</h2>
-            <p>{mode === 'client' ? 'Use seu WhatsApp para reservar ou acompanhar seus horarios.' : 'Acesse a operacao da agenda e disponibilidade.'}</p>
-          </div>
-          <div className="login-switcher">
-            <button type="button" className={mode === 'client' ? 'active' : ''} onClick={() => setMode('client')}>Sou cliente</button>
-            <button type="button" className={mode === 'owner' ? 'active' : ''} onClick={() => setMode('owner')}>Sou gestora</button>
+            <div className="login-intro-accent" aria-hidden="true" />
           </div>
 
-          {mode === 'client' ? (
-            <form className="login-form" onSubmit={handleClientLogin}>
-              <label>
-                Nome completo
-                <input value={clientName} onChange={event => setClientName(event.target.value)} placeholder="Seu nome" />
-              </label>
-              <label>
-                WhatsApp
-                <input value={clientPhone} onChange={event => setClientPhone(normalizePhoneInput(event.target.value))} placeholder="11999999999" />
-              </label>
-              <button className="button button-primary" type="submit" disabled={busy}>Entrar como cliente</button>
-            </form>
-          ) : (
-            <form className="login-form" onSubmit={handleOwnerLogin}>
-              <label>
-                Senha
-                <input type="password" value={ownerPassword} onChange={event => setOwnerPassword(event.target.value)} placeholder="Sua senha" />
-              </label>
-              <button className="button button-primary" type="submit" disabled={busy}>Entrar no painel</button>
-            </form>
-          )}
+          <div className="login-access-card">
+            <div className="login-panel-head">
+              <span className="eyebrow">Acesso</span>
+              <h2>{mode === 'client' ? 'Entrar como cliente' : 'Entrar no painel'}</h2>
+              <p>{mode === 'client' ? 'Entre ou crie seu acesso.' : 'Acesse a agenda e a disponibilidade.'}</p>
+            </div>
+
+            <div className="login-switcher">
+              <button type="button" className={mode === 'client' ? 'active' : ''} onClick={() => setMode('client')}>Sou cliente</button>
+              <button type="button" className={mode === 'owner' ? 'active' : ''} onClick={() => setMode('owner')}>Sou gestora</button>
+            </div>
+
+            {mode === 'client' ? (
+              <form className="login-form" onSubmit={handleClientSubmit}>
+                <div className="login-mini-switcher">
+                  <button type="button" className={clientAuthMode === 'login' ? 'active' : ''} onClick={() => setClientAuthMode('login')}>Entrar</button>
+                  <button type="button" className={clientAuthMode === 'register' ? 'active' : ''} onClick={() => setClientAuthMode('register')}>Cadastrar</button>
+                </div>
+                {clientAuthMode === 'register' && (
+                  <label>
+                    Nome completo
+                    <input value={clientName} onChange={event => setClientName(event.target.value)} placeholder="Seu nome" />
+                  </label>
+                )}
+                <label>
+                  WhatsApp
+                  <input value={clientPhone} onChange={event => setClientPhone(normalizePhoneInput(event.target.value))} placeholder="11999999999" />
+                </label>
+                <label>
+                  Senha
+                  <input type="password" value={clientPassword} onChange={event => setClientPassword(event.target.value)} placeholder={clientAuthMode === 'register' ? 'Crie uma senha' : 'Sua senha'} />
+                </label>
+                {clientAuthMode === 'register' && (
+                  <label>
+                    Confirmar senha
+                    <input type="password" value={clientPasswordConfirm} onChange={event => setClientPasswordConfirm(event.target.value)} placeholder="Repita a senha" />
+                  </label>
+                )}
+                <button className="button button-primary" type="submit" disabled={busy}>
+                  {clientAuthMode === 'register' ? 'Criar acesso' : 'Entrar como cliente'}
+                </button>
+              </form>
+            ) : (
+              <form className="login-form" onSubmit={handleOwnerLogin}>
+                <label>
+                  Senha
+                  <input type="password" value={ownerPassword} onChange={event => setOwnerPassword(event.target.value)} placeholder="Sua senha" />
+                </label>
+                <button className="button button-primary" type="submit" disabled={busy}>Entrar no painel</button>
+              </form>
+            )}
+          </div>
         </article>
       </section>
     </main>
@@ -524,7 +579,7 @@ const ClientWorkspace = ({ session, onLogout }: { session: ClientSession; onLogo
       const [serviceRows, staffRows, appointmentRows] = await Promise.all([
         api.getServices(false),
         api.getStaff(false),
-        api.getAppointments({ clientId: session.id }),
+        api.getAppointments({ clientId: session.id }, { clientToken: session.token }),
       ]);
 
       const activeStaff = staffRows.filter(item => item.active);
@@ -544,7 +599,7 @@ const ClientWorkspace = ({ session, onLogout }: { session: ClientSession; onLogo
     } finally {
       setLoading(false);
     }
-  }, [session.id, toasts.push]);
+  }, [session.id, session.token, toasts.push]);
 
   useEffect(() => {
     void load();
@@ -580,7 +635,7 @@ const ClientWorkspace = ({ session, onLogout }: { session: ClientSession; onLogo
         time: draft.time,
         notes: draft.notes.trim(),
         status: 'pending',
-      });
+      }, { clientToken: session.token });
       setDraft(current => ({ ...current, time: '', notes: '' }));
       toasts.push('Agendamento enviado', 'success');
       await load();
@@ -594,7 +649,7 @@ const ClientWorkspace = ({ session, onLogout }: { session: ClientSession; onLogo
   const handleCancel = async (appointmentId: string) => {
     setBusy(true);
     try {
-      await api.updateAppointment(appointmentId, { status: 'cancelled' });
+      await api.updateAppointment(appointmentId, { status: 'cancelled' }, { clientToken: session.token });
       toasts.push('Agendamento cancelado', 'success');
       await load();
     } catch (error) {
@@ -1225,7 +1280,7 @@ const OwnerWorkspace = ({ session, onLogout }: { session: OwnerSession; onLogout
         api.getServices(true),
         api.getStaff(true),
         api.getClients(session.token),
-        api.getAppointments({}),
+        api.getAppointments({}, { ownerToken: session.token }),
       ]);
 
       const sortedAppointments = [...appointmentRows].sort(sortAppointments);
@@ -1327,7 +1382,7 @@ const OwnerWorkspace = ({ session, onLogout }: { session: OwnerSession; onLogout
   const runAppointmentAction = async (appointmentId: string, payload: Partial<{ status: AppointmentStatus; paymentStatus: PaymentStatus }>, successMessage: string) => {
     setBusyAction(true);
     try {
-      await api.updateAppointment(appointmentId, payload, session.token);
+      await api.updateAppointment(appointmentId, payload, { ownerToken: session.token });
       toasts.push(successMessage, 'success');
       await load();
     } catch (error) {
@@ -1360,7 +1415,7 @@ const OwnerWorkspace = ({ session, onLogout }: { session: OwnerSession; onLogout
       await api.updateAppointment(
         rescheduleAppointment.id,
         { date: rescheduleDate, time: rescheduleTime },
-        session.token,
+        { ownerToken: session.token },
       );
       toasts.push('Horario remarcado', 'success');
       clearReschedule();
@@ -1387,10 +1442,10 @@ const OwnerWorkspace = ({ session, onLogout }: { session: OwnerSession; onLogout
 
     setBusyAction(true);
     try {
-      const client = await api.clientAccess({
+      const client = await api.upsertClientContact({
         name: quickBooking.clientName.trim(),
         phone: normalizePhoneInput(quickBooking.clientPhone),
-      });
+      }, session.token);
       await api.createAppointment({
         clientId: client.id,
         clientName: client.name,
@@ -1401,7 +1456,7 @@ const OwnerWorkspace = ({ session, onLogout }: { session: OwnerSession; onLogout
         time: quickBooking.time,
         notes: quickBooking.notes.trim(),
         status: 'confirmed',
-      });
+      }, { ownerToken: session.token });
       setQuickBooking({ ...emptyQuickBookingDraft(), serviceId: quickBooking.serviceId });
       toasts.push('Encaixe criado na agenda', 'success');
       await load();
@@ -1681,6 +1736,18 @@ export default function App() {
     storeSession(null);
     setSession(null);
   };
+
+  useEffect(() => {
+    if (!session) return undefined;
+
+    const handleUnauthorized = () => {
+      storeSession(null);
+      setSession(null);
+    };
+
+    window.addEventListener('app:unauthorized', handleUnauthorized);
+    return () => window.removeEventListener('app:unauthorized', handleUnauthorized);
+  }, [session]);
 
   if (!session) {
     return <LandingPage onLogin={handleLogin} />;

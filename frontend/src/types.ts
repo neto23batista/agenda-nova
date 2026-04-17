@@ -14,9 +14,16 @@ export interface ClientSession {
   id: string;
   name: string;
   phone: string;
+  token: string;
 }
 
 export type Session = OwnerSession | ClientSession;
+
+export interface ClientAuthResult {
+  client: Client;
+  accessToken: string;
+  salon?: string;
+}
 
 export interface Service {
   id: string;

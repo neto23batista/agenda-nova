@@ -1,4 +1,4 @@
-import type { Appointment, Block, Client, PaymentStatus, Service, Staff } from './types';
+import type { Appointment, Block, Client, ClientAuthResult, PaymentStatus, Service, Staff } from './types';
 import {
   normalizeAppointment,
   normalizeBlock,
@@ -21,15 +21,20 @@ const readErrorMessage = async (response: Response): Promise<string> => {
 };
 
 const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+    ...(init?.headers || {}),
+  };
+
   const response = await fetch(buildUrl(path), {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers || {}),
-    },
     ...init,
+    headers,
   });
 
   if (!response.ok) {
+    if (response.status === 401 && typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('app:unauthorized'));
+    }
     throw new Error(await readErrorMessage(response));
   }
 
@@ -39,6 +44,11 @@ const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
 const authHeaders = (token?: string): HeadersInit => (
   token ? { Authorization: `Bearer ${token}` } : {}
 );
+
+const requestHeaders = (auth?: { ownerToken?: string; clientToken?: string }): HeadersInit => ({
+  ...(auth?.ownerToken ? { Authorization: `Bearer ${auth.ownerToken}` } : {}),
+  ...(auth?.clientToken ? { 'X-Client-Token': auth.clientToken } : {}),
+});
 
 const queryString = (params: Record<string, string | undefined>): string => {
   const query = new URLSearchParams();
@@ -57,9 +67,44 @@ export const api = {
     });
   },
 
-  async clientAccess(payload: { name: string; phone: string }): Promise<Client> {
+  async registerClient(payload: { name: string; phone: string; password: string }): Promise<ClientAuthResult> {
+    const data = await request<unknown>('/api/client-register', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    const record = typeof data === 'object' && data !== null ? data as Record<string, unknown> : {};
+    const accessToken = typeof record.accessToken === 'string' ? record.accessToken : '';
+    if (!accessToken) {
+      throw new Error('Falha ao iniciar sessao do cliente');
+    }
+    return {
+      client: normalizeClient(record),
+      accessToken,
+      salon: typeof record.salon === 'string' ? record.salon : undefined,
+    };
+  },
+
+  async loginClient(payload: { phone: string; password: string }): Promise<ClientAuthResult> {
+    const data = await request<unknown>('/api/client-login', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    const record = typeof data === 'object' && data !== null ? data as Record<string, unknown> : {};
+    const accessToken = typeof record.accessToken === 'string' ? record.accessToken : '';
+    if (!accessToken) {
+      throw new Error('Falha ao iniciar sessao do cliente');
+    }
+    return {
+      client: normalizeClient(record),
+      accessToken,
+      salon: typeof record.salon === 'string' ? record.salon : undefined,
+    };
+  },
+
+  async upsertClientContact(payload: { name: string; phone: string }, token: string): Promise<Client> {
     const data = await request<unknown>('/api/client-access', {
       method: 'POST',
+      headers: authHeaders(token),
       body: JSON.stringify(payload),
     });
     return normalizeClient(data);
@@ -155,8 +200,13 @@ export const api = {
     });
   },
 
-  async getAppointments(params: { clientId?: string; staffId?: string; date?: string; status?: string }): Promise<Appointment[]> {
-    const data = await request<unknown[]>(`/api/appointments${queryString(params)}`);
+  async getAppointments(
+    params: { clientId?: string; staffId?: string; date?: string; status?: string },
+    auth?: { ownerToken?: string; clientToken?: string },
+  ): Promise<Appointment[]> {
+    const data = await request<unknown[]>(`/api/appointments${queryString(params)}`, {
+      headers: requestHeaders(auth),
+    });
     return data.map(normalizeAppointment);
   },
 
@@ -172,9 +222,10 @@ export const api = {
     status?: string;
     paymentStatus?: PaymentStatus;
     paymentMethod?: string;
-  }): Promise<Appointment> {
+  }, auth?: { ownerToken?: string; clientToken?: string }): Promise<Appointment> {
     const data = await request<unknown>('/api/appointments', {
       method: 'POST',
+      headers: requestHeaders(auth),
       body: JSON.stringify(payload),
     });
     return normalizeAppointment(data);
@@ -191,10 +242,10 @@ export const api = {
     staffId: string;
     paymentStatus: PaymentStatus;
     paymentMethod: string;
-  }>, token?: string): Promise<Appointment> {
+  }>, auth?: { ownerToken?: string; clientToken?: string }): Promise<Appointment> {
     const data = await request<unknown>(`/api/appointments/${id}`, {
       method: 'PATCH',
-      headers: authHeaders(token),
+      headers: requestHeaders(auth),
       body: JSON.stringify(payload),
     });
     return normalizeAppointment(data);

@@ -2,9 +2,11 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const FILE = path.join(__dirname, 'belle-data.json');
 const BACKUP_FILE = path.join(__dirname, 'belle-data.backup.json');
+const TEMP_FILE = `${FILE}.tmp`;
 const SINGLE_PROFESSIONAL_MODE = true;
 
 const DEFAULT_SERVICES = [
@@ -26,6 +28,27 @@ const timeToMin = value => {
   return (hours * 60) + minutes;
 };
 const normalizePhone = value => String(value || '').replace(/\D/g, '');
+const hashPassword = password => {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(String(password), salt, 64).toString('hex');
+  return { salt, hash };
+};
+const verifyPassword = (password, salt, hash) => {
+  if (!salt || !hash) return false;
+  const incoming = crypto.scryptSync(String(password), salt, 64);
+  const stored = Buffer.from(hash, 'hex');
+  if (incoming.length !== stored.length) return false;
+  return crypto.timingSafeEqual(incoming, stored);
+};
+const toPublicClient = client => ({
+  id: client.id,
+  name: client.name,
+  phone: client.phone,
+  email: client.email || '',
+  notes: client.notes || '',
+  created_at: client.created_at,
+  updated_at: client.updated_at,
+});
 
 function loadFromDisk() {
   try {
@@ -89,9 +112,16 @@ function enforceSingleProfessionalMode() {
 
 function persist() {
   try {
-    fs.writeFileSync(FILE, JSON.stringify(db, null, 2), 'utf8');
+    const payload = JSON.stringify(db, null, 2);
+    fs.writeFileSync(TEMP_FILE, payload, 'utf8');
+    fs.renameSync(TEMP_FILE, FILE);
   } catch (error) {
     console.error('[db] failed to persist database:', error.message);
+    try {
+      if (fs.existsSync(TEMP_FILE)) fs.unlinkSync(TEMP_FILE);
+    } catch (cleanupError) {
+      console.warn('[db] failed to cleanup temp file:', cleanupError.message);
+    }
   }
 }
 
@@ -210,7 +240,9 @@ const DB = {
   },
 
   getClients() {
-    return [...db.clients].sort((left, right) => left.name.localeCompare(right.name, 'pt-BR'));
+    return [...db.clients]
+      .sort((left, right) => left.name.localeCompare(right.name, 'pt-BR'))
+      .map(toPublicClient);
   },
 
   findClientByPhone(phone) {
@@ -227,7 +259,7 @@ const DB = {
         existing.updated_at = now();
         persist();
       }
-      return existing;
+      return toPublicClient(existing);
     }
 
     return this.createClient({
@@ -241,6 +273,7 @@ const DB = {
   createClient({ name, phone, email = '', notes = '' }) {
     if (!name?.trim()) throw new Error('Nome e obrigatorio');
     if (!phone?.trim()) throw new Error('Telefone e obrigatorio');
+    if (this.findClientByPhone(phone)) throw new Error('Ja existe cliente com este telefone');
 
     const client = {
       id: 'c' + uid(),
@@ -253,12 +286,17 @@ const DB = {
 
     db.clients.push(client);
     persist();
-    return client;
+    return toPublicClient(client);
   },
 
   updateClient(id, patch) {
     const client = db.clients.find(item => item.id === id);
     if (!client) throw new Error('Cliente nao encontrado');
+
+    if (patch.phone !== undefined) {
+      const conflict = db.clients.find(item => item.id !== id && normalizePhone(item.phone) === normalizePhone(patch.phone));
+      if (conflict) throw new Error('Ja existe cliente com este telefone');
+    }
 
     ['name', 'phone', 'email', 'notes'].forEach(key => {
       if (patch[key] !== undefined) {
@@ -268,7 +306,55 @@ const DB = {
     client.updated_at = now();
 
     persist();
-    return client;
+    return toPublicClient(client);
+  },
+
+  registerClientAccount({ name, phone, password }) {
+    const normalizedPhone = normalizePhone(phone);
+    if (!name?.trim()) throw new Error('Nome e obrigatorio');
+    if (!normalizedPhone) throw new Error('Telefone e obrigatorio');
+    if (!password || String(password).length < 4) throw new Error('Senha invalida');
+
+    let client = this.findClientByPhone(normalizedPhone);
+    if (client && client.passwordHash) {
+      throw new Error('Ja existe uma conta com este WhatsApp');
+    }
+
+    const credentials = hashPassword(password);
+
+    if (client) {
+      client.name = name.trim();
+      client.phone = normalizedPhone;
+      client.passwordSalt = credentials.salt;
+      client.passwordHash = credentials.hash;
+      client.updated_at = now();
+      persist();
+      return toPublicClient(client);
+    }
+
+    const record = {
+      id: 'c' + uid(),
+      name: name.trim(),
+      phone: normalizedPhone,
+      email: '',
+      notes: '',
+      passwordSalt: credentials.salt,
+      passwordHash: credentials.hash,
+      created_at: now(),
+    };
+
+    db.clients.push(record);
+    persist();
+    return toPublicClient(record);
+  },
+
+  authenticateClientAccount({ phone, password }) {
+    const client = this.findClientByPhone(phone);
+    if (!client || !client.passwordHash || !verifyPassword(password, client.passwordSalt, client.passwordHash)) {
+      throw new Error('WhatsApp ou senha incorretos');
+    }
+
+    return toPublicClient(client);
   },
 
   getBlocks(staffId) {
@@ -335,6 +421,10 @@ const DB = {
     }
 
     return [...list].sort((left, right) => left.date.localeCompare(right.date) || left.time.localeCompare(right.time));
+  },
+
+  getAppointmentById(id) {
+    return db.appointments.find(item => item.id === id) || null;
   },
 
   createAppointment({

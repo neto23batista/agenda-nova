@@ -1,9 +1,9 @@
-{
+﻿{
     "services":  [
                      {
                          "id":  "s1",
                          "name":  "Manicure Simples",
-                         "icon":  "ðŸŒ¸",
+                         "icon":  "Ã°Å¸Å’Â¸",
                          "duration":  40,
                          "price":  45,
                          "active":  1
@@ -11,7 +11,7 @@
                      {
                          "id":  "s2",
                          "name":  "Pedicure Completa",
-                         "icon":  "ðŸ¦¶",
+                         "icon":  "Ã°Å¸Â¦Â¶",
                          "duration":  50,
                          "price":  60,
                          "active":  1
@@ -19,15 +19,15 @@
                      {
                          "id":  "s3",
                          "name":  "Gel Alongado",
-                         "icon":  "ðŸ’…",
+                         "icon":  "Ã°Å¸â€™â€¦",
                          "duration":  90,
                          "price":  120,
                          "active":  1
                      },
                      {
                          "id":  "s4",
-                         "name":  "EsmaltaÃ§Ã£o em Gel",
-                         "icon":  "âœ¨",
+                         "name":  "EsmaltaÃƒÂ§ÃƒÂ£o em Gel",
+                         "icon":  "Ã¢Å“Â¨",
                          "duration":  60,
                          "price":  80,
                          "active":  1
@@ -35,7 +35,7 @@
                      {
                          "id":  "s5",
                          "name":  "Combo Mani + Pedi",
-                         "icon":  "ðŸ‘‘",
+                         "icon":  "Ã°Å¸â€˜â€˜",
                          "duration":  90,
                          "price":  95,
                          "active":  1
@@ -59,7 +59,7 @@
                              "clientPhone":  "(17) 97602-4884",
                              "serviceId":  "s3",
                              "serviceName":  "Gel Alongado",
-                             "serviceIcon":  "ðŸ’…",
+                             "serviceIcon":  "Ã°Å¸â€™â€¦",
                              "servicePrice":  120,
                              "serviceDuration":  90,
                              "date":  "2026-03-14",
@@ -91,3 +91,4 @@
 
                ]
 }
+

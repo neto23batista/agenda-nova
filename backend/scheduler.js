@@ -1,10 +1,7 @@
-// ═══════════════════════════════════════════════════════════
-//  scheduler.js — Lembretes automáticos WhatsApp
-//  Verifica a cada 30 minutos quem precisa de lembrete
-// ═══════════════════════════════════════════════════════════
 'use strict';
 
 const cron = require('node-cron');
+
 const { DB } = require('./db');
 const {
   notifyReminderDay,
@@ -12,74 +9,81 @@ const {
   notifyOwnerReminder,
 } = require('./whatsapp');
 
-// ── Helpers de data/hora ─────────────────────────────────────
-const pad = n => String(n).padStart(2, '0');
+const SCHEDULER_TIMEZONE = process.env.APP_TIMEZONE || 'America/Sao_Paulo';
+
+function localDateString(date = new Date()) {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: SCHEDULER_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+
+  const parts = formatter.formatToParts(date);
+  const year = parts.find(part => part.type === 'year')?.value || '0000';
+  const month = parts.find(part => part.type === 'month')?.value || '01';
+  const day = parts.find(part => part.type === 'day')?.value || '01';
+  return `${year}-${month}-${day}`;
+}
 
 function todayStr() {
-  return new Date().toISOString().split('T')[0];
+  return localDateString(new Date());
 }
 
 function tomorrowStr() {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  return d.toISOString().split('T')[0];
+  const next = new Date();
+  next.setDate(next.getDate() + 1);
+  return localDateString(next);
 }
 
-function isWithinOneHour(appt) {
-  const now   = new Date();
-  const apptD = new Date(`${appt.date}T${appt.time}:00`);
-  const diff  = apptD.getTime() - now.getTime();
-  return diff > 0 && diff <= 60 * 60 * 1000; // até 1h
+function isWithinOneHour(appointment) {
+  const now = new Date();
+  const appointmentDate = new Date(`${appointment.date}T${appointment.time}:00`);
+  const diff = appointmentDate.getTime() - now.getTime();
+  return diff > 0 && diff <= 60 * 60 * 1000;
 }
 
-// ── Executa a verificação ────────────────────────────────────
 async function runCheck() {
-  const ts = new Date().toLocaleString('pt-BR');
-  console.log(`\n⏰ [${ts}] Scheduler: verificando lembretes...`);
+  const stamp = new Date().toLocaleString('pt-BR', { timeZone: SCHEDULER_TIMEZONE });
+  console.log(`\n[scheduler ${stamp}] checking reminders...`);
 
-  const today    = todayStr();
+  const today = todayStr();
   const tomorrow = tomorrowStr();
-  let   sent     = 0;
+  let sent = 0;
 
   try {
-    const appts = DB.getConfirmedFrom(today);
+    const appointments = DB.getConfirmedFrom(today);
 
-    for (const appt of appts) {
-
-      // ── D-1: lembrete para amanhã ─────────────────────────
-      if (appt.date === tomorrow && !appt.reminded_day) {
-        console.log(`  📅 D-1 → ${appt.clientName} (${appt.date} às ${appt.time})`);
-        await notifyReminderDay(appt);
-        DB.markReminded(appt.id, 'day');
-        sent++;
+    for (const appointment of appointments) {
+      if (appointment.date === tomorrow && !appointment.reminded_day) {
+        console.log(`[scheduler] D-1 -> ${appointment.clientName} (${appointment.date} ${appointment.time})`);
+        await notifyReminderDay(appointment);
+        DB.markReminded(appointment.id, 'day');
+        sent += 1;
       }
 
-      // ── H-1: lembrete 1 hora antes ────────────────────────
-      if (!appt.reminded_hour && isWithinOneHour(appt)) {
-        console.log(`  ⏰ H-1 → ${appt.clientName} (${appt.date} às ${appt.time})`);
-        await notifyReminderHour(appt);
-        await notifyOwnerReminder(appt);
-        DB.markReminded(appt.id, 'hour');
-        sent++;
+      if (!appointment.reminded_hour && isWithinOneHour(appointment)) {
+        console.log(`[scheduler] H-1 -> ${appointment.clientName} (${appointment.date} ${appointment.time})`);
+        await notifyReminderHour(appointment);
+        await notifyOwnerReminder(appointment);
+        DB.markReminded(appointment.id, 'hour');
+        sent += 1;
       }
     }
 
-    console.log(`  ✅ ${appts.length} agendamento(s) verificado(s), ${sent} lembrete(s) enviado(s).`);
-
-  } catch (err) {
-    console.error('  ❌ Erro no scheduler:', err.message);
+    console.log(`[scheduler] ${appointments.length} appointments checked, ${sent} reminders sent.`);
+  } catch (error) {
+    console.error('[scheduler] error while checking reminders:', error.message);
   }
 }
 
-// ── Inicia o cron ────────────────────────────────────────────
 function startScheduler() {
-  // Roda a cada 30 minutos
-  cron.schedule('*/30 * * * *', runCheck);
+  cron.schedule('*/30 * * * *', runCheck, { timezone: SCHEDULER_TIMEZONE });
 
-  // Roda uma vez 5 segundos após iniciar (pega pendentes imediatos)
-  setTimeout(runCheck, 5000);
+  const startupRun = setTimeout(runCheck, 5000);
+  if (typeof startupRun.unref === 'function') startupRun.unref();
 
-  console.log('⏰ Scheduler iniciado — lembretes verificados a cada 30 minutos.');
+  console.log(`[scheduler] started with timezone ${SCHEDULER_TIMEZONE}.`);
 }
 
 module.exports = { startScheduler };

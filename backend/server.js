@@ -20,7 +20,64 @@ const PORT = process.env.PORT || 3001;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const OWNER_PASSWORD = process.env.OWNER_PASSWORD || 'belle123';
 const CORS_ORIGINS = process.env.CORS_ORIGINS;
-const ownerTokens = new Set();
+const AUTH_SECRET = process.env.AUTH_SECRET || OWNER_PASSWORD;
+const OWNER_TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
+const CLIENT_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+const normalizePhone = value => String(value || '').replace(/\D/g, '');
+
+const encodeTokenPart = value => Buffer.from(value, 'utf8').toString('base64url');
+const decodeTokenPart = value => Buffer.from(value, 'base64url').toString('utf8');
+
+const signPayload = payload => {
+  const body = encodeTokenPart(JSON.stringify(payload));
+  const signature = crypto.createHmac('sha256', AUTH_SECRET).update(body).digest('base64url');
+  return `${body}.${signature}`;
+};
+
+const verifyToken = token => {
+  if (!token || typeof token !== 'string' || !token.includes('.')) return null;
+
+  const [body, signature] = token.split('.');
+  if (!body || !signature) return null;
+
+  const expectedSignature = crypto.createHmac('sha256', AUTH_SECRET).update(body).digest('base64url');
+  const incoming = Buffer.from(signature);
+  const expected = Buffer.from(expectedSignature);
+  if (incoming.length !== expected.length) return null;
+  if (!crypto.timingSafeEqual(incoming, expected)) return null;
+
+  try {
+    const payload = JSON.parse(decodeTokenPart(body));
+    if (!payload || typeof payload !== 'object') return null;
+    if (!payload.exp || Number(payload.exp) < Date.now()) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+};
+
+const rememberOwnerToken = () => signPayload({
+  role: 'owner',
+  exp: Date.now() + OWNER_TOKEN_TTL_MS,
+});
+
+const rememberClientToken = client => signPayload({
+  role: 'client',
+  clientId: client.id,
+  phone: normalizePhone(client.phone),
+  exp: Date.now() + CLIENT_TOKEN_TTL_MS,
+});
+
+const getOwnerSession = req => {
+  const token = getOwnerToken(req);
+  const payload = verifyToken(token);
+  return payload?.role === 'owner' ? payload : null;
+};
+
+if (!process.env.OWNER_PASSWORD) {
+  console.warn('[auth] OWNER_PASSWORD not set. Using fallback password.');
+}
 
 app.use(helmet());
 app.use(
@@ -79,9 +136,19 @@ const getOwnerToken = req => {
   return auth.startsWith('Bearer ') ? auth.slice(7) : null;
 };
 
+const getClientToken = req => {
+  const token = req.headers['x-client-token'];
+  return typeof token === 'string' && token.trim() ? token.trim() : null;
+};
+
+const getClientSession = req => {
+  const token = getClientToken(req);
+  const payload = verifyToken(token);
+  return payload?.role === 'client' ? payload : null;
+};
+
 const requireOwner = (req, res, next) => {
-  const token = getOwnerToken(req);
-  if (token && ownerTokens.has(token)) return next();
+  if (getOwnerSession(req)) return next();
   return res.status(401).json({ error: 'Authorization required' });
 };
 
@@ -99,6 +166,17 @@ const schemas = {
   clientAccess: Joi.object({
     name: Joi.string().min(2).max(80).required(),
     phone: Joi.string().min(10).max(20).required(),
+  }),
+
+  clientRegister: Joi.object({
+    name: Joi.string().min(2).max(80).required(),
+    phone: Joi.string().min(10).max(20).required(),
+    password: Joi.string().min(4).max(80).required(),
+  }),
+
+  clientLogin: Joi.object({
+    phone: Joi.string().min(10).max(20).required(),
+    password: Joi.string().min(4).max(80).required(),
   }),
 
   serviceCreate: Joi.object({
@@ -227,9 +305,7 @@ app.post('/api/login', wrap((req, res) => {
     throw error;
   }
 
-  const token = crypto.randomBytes(24).toString('hex');
-  ownerTokens.add(token);
-  setTimeout(() => ownerTokens.delete(token), 12 * 60 * 60 * 1000);
+  const token = rememberOwnerToken();
 
   res.json({
     token,
@@ -237,7 +313,29 @@ app.post('/api/login', wrap((req, res) => {
   });
 }));
 
-app.post('/api/client-access', wrap((req, res) => {
+app.post('/api/client-register', wrap((req, res) => {
+  const payload = validate(schemas.clientRegister, req.body || {});
+  const client = DB.registerClientAccount(payload);
+  const accessToken = rememberClientToken(client);
+  res.json({
+    ...client,
+    accessToken,
+    salon: process.env.SALON_NAME || 'Fernanda Silva Nail Designer',
+  });
+}));
+
+app.post('/api/client-login', wrap((req, res) => {
+  const payload = validate(schemas.clientLogin, req.body || {});
+  const client = DB.authenticateClientAccount(payload);
+  const accessToken = rememberClientToken(client);
+  res.json({
+    ...client,
+    accessToken,
+    salon: process.env.SALON_NAME || 'Fernanda Silva Nail Designer',
+  });
+}));
+
+app.post('/api/client-access', requireOwner, wrap((req, res) => {
   const payload = validate(schemas.clientAccess, req.body || {});
   const client = DB.createOrGetClient(payload);
   res.json(client);
@@ -309,8 +407,23 @@ app.patch('/api/clients/:id', requireOwner, wrap((req, res) => {
 }));
 
 app.get('/api/appointments', wrap((req, res) => {
+  const isOwner = !!getOwnerSession(req);
+  const clientSession = getClientSession(req);
+
+  if (!isOwner && !clientSession) {
+    const error = new Error('Authorization required');
+    error.status = 401;
+    throw error;
+  }
+
+  if (!isOwner && req.query.clientId && req.query.clientId !== clientSession.clientId) {
+    const error = new Error('Forbidden');
+    error.status = 403;
+    throw error;
+  }
+
   const appointments = DB.getAppointments({
-    clientId: req.query.clientId,
+    clientId: isOwner ? req.query.clientId : clientSession.clientId,
     staffId: req.query.staffId,
     date: req.query.date,
     status: req.query.status,
@@ -320,7 +433,32 @@ app.get('/api/appointments', wrap((req, res) => {
 
 app.post('/api/appointments', wrap(async (req, res) => {
   const payload = validate(schemas.appointmentCreate, req.body || {});
-  const appointment = DB.createAppointment(payload);
+  const isOwner = !!getOwnerSession(req);
+  const clientSession = getClientSession(req);
+
+  if (!isOwner && !clientSession) {
+    const error = new Error('Authorization required');
+    error.status = 401;
+    throw error;
+  }
+
+  if (!isOwner) {
+    if (payload.clientId && payload.clientId !== clientSession.clientId) {
+      const error = new Error('Forbidden');
+      error.status = 403;
+      throw error;
+    }
+  }
+
+  const appointment = DB.createAppointment(
+    isOwner
+      ? payload
+      : {
+          ...payload,
+          clientId: clientSession.clientId,
+          clientPhone: clientSession.phone || payload.clientPhone,
+        },
+  );
 
   wpp.notifyOwnerNewBooking(appointment).catch(console.error);
 
@@ -329,14 +467,38 @@ app.post('/api/appointments', wrap(async (req, res) => {
 
 app.patch('/api/appointments/:id', wrap(async (req, res) => {
   const payload = validate(schemas.appointmentPatch, req.body || {});
-  const token = getOwnerToken(req);
-  const isOwner = token && ownerTokens.has(token);
+  const isOwner = !!getOwnerSession(req);
+  const clientSession = getClientSession(req);
 
   if (!isOwner) {
+    if (!clientSession) {
+      const error = new Error('Authorization required');
+      error.status = 401;
+      throw error;
+    }
+
     const onlyCancel = Object.keys(payload).every(key => key === 'status') && payload.status === 'cancelled';
     if (!onlyCancel) {
       const error = new Error('Authorization required');
       error.status = 401;
+      throw error;
+    }
+
+    const appointment = DB.getAppointmentById(req.params.id);
+    if (!appointment) {
+      const error = new Error('Agendamento nao encontrado');
+      error.status = 404;
+      throw error;
+    }
+
+    const appointmentClientId = appointment.client_id || appointment.clientId || '';
+    const ownsAppointment = appointmentClientId
+      ? appointmentClientId === clientSession.clientId
+      : normalizePhone(appointment.clientPhone) === clientSession.phone;
+
+    if (!ownsAppointment) {
+      const error = new Error('Forbidden');
+      error.status = 403;
       throw error;
     }
   }

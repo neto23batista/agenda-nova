@@ -1,138 +1,133 @@
-// ═══════════════════════════════════════════════════════════
-//  whatsapp.js — Serviço de notificações WhatsApp
-//  Suporta: Evolution API (gratuito) | Twilio (pago)
-// ═══════════════════════════════════════════════════════════
 'use strict';
 
-const axios  = require('axios');
+const axios = require('axios');
+
 require('dotenv').config();
 
 const PROVIDER = (process.env.WHATSAPP_PROVIDER || 'evolution').toLowerCase();
-const SALON    = process.env.SALON_NAME || 'Fernanda Silva Nail Designer';
+const SALON = process.env.SALON_NAME || 'Fernanda Silva Nail Designer';
 
-// ── Normaliza número para formato internacional ─────────────
-// Entrada:  "(11) 98888-7777"  →  Saída: "5511988887777"
 function normalizePhone(raw) {
   if (!raw) return null;
+
   let digits = String(raw).replace(/\D/g, '');
-  if (digits.startsWith('0'))  digits = digits.slice(1);
-  if (digits.length <= 11)     digits = '55' + digits;  // adiciona DDI Brasil
+  if (digits.startsWith('0')) digits = digits.slice(1);
+  if (digits.length <= 11) digits = `55${digits}`;
   return digits;
 }
 
-// ── Formata data em português ───────────────────────────────
 function fmtDate(dateStr) {
-  const [, m, d]  = dateStr.split('-');
-  const months    = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
-  const weekDays  = ['dom','seg','ter','qua','qui','sex','sáb'];
-  const dow       = weekDays[new Date(dateStr + 'T12:00:00').getDay()];
-  return `${dow}, ${parseInt(d)} de ${months[parseInt(m) - 1]}`;
+  const [, month, day] = dateStr.split('-');
+  const months = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+  const weekDays = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'];
+  const weekday = weekDays[new Date(`${dateStr}T12:00:00`).getDay()];
+  return `${weekday}, ${parseInt(day, 10)} de ${months[parseInt(month, 10) - 1]}`;
 }
 
-// ── Templates de mensagem ────────────────────────────────────
 const MSG = {
+  confirmClient: appointment => `*Agendamento confirmado!*
 
-  // Para a CLIENTE quando o dono confirmar
-  confirmClient: (a) => `✅ *Agendamento Confirmado!*
+Ola, *${appointment.clientName}*!
 
-Olá, *${a.clientName}*! 🌸
+Seu horario no *${SALON}* foi confirmado:
 
-Seu atendimento no *${SALON}* está confirmado:
+*Servico:* ${appointment.serviceName}
+*Data:* ${fmtDate(appointment.date)}
+*Horario:* ${appointment.time}
 
-💅 *Serviço:* ${a.serviceName}
-📅 *Data:* ${fmtDate(a.date)}
-🕐 *Horário:* ${a.time}
+Se precisar remarcar, avise com antecedencia.`,
 
-Em caso de imprevisto, avise com antecedência.
-Te esperamos! 💖`,
+  reminderDay: appointment => `*Lembrete para amanha*
 
-  // Para a CLIENTE — lembrete 1 dia antes
-  reminderDay: (a) => `⏰ *Lembrete para amanhã!*
+Ola, *${appointment.clientName}*!
 
-Oi, *${a.clientName}*! 😊
+Passando para lembrar do seu atendimento:
 
-Lembrando do seu atendimento amanhã:
+*Servico:* ${appointment.serviceName}
+*Data:* ${fmtDate(appointment.date)}
+*Horario:* ${appointment.time}
+*Local:* ${SALON}
 
-💅 *Serviço:* ${a.serviceName}
-📅 *Data:* ${fmtDate(a.date)}
-🕐 *Horário:* ${a.time}
-📍 *Local:* ${SALON}
+Se precisar cancelar, avise o quanto antes.`,
 
-_Precisa cancelar? Avise o quanto antes._ 🙏`,
+  reminderHour: appointment => `*Seu atendimento e em 1 hora*
 
-  // Para a CLIENTE — lembrete 1 hora antes
-  reminderHour: (a) => `🔔 *Daqui 1 hora!*
+Ola, *${appointment.clientName}*!
 
-Oi, *${a.clientName}*! ✨
+Seu horario no *${SALON}* comeca as *${appointment.time}*.
+*Servico:* ${appointment.serviceName}
 
-Seu atendimento no *${SALON}* é às *${a.time}*.
-💅 *Serviço:* ${a.serviceName}
+Estamos te esperando.`,
 
-Nos vemos em breve! 🌸`,
+  newBookingOwner: appointment => `*Novo agendamento recebido*
 
-  // Para o DONO — novo agendamento solicitado
-  newBookingOwner: (a) => `🔔 *Novo Agendamento!*
+*Cliente:* ${appointment.clientName}
+*Telefone:* ${appointment.clientPhone || 'nao informado'}
+*Servico:* ${appointment.serviceName}
+*Data:* ${fmtDate(appointment.date)}
+*Horario:* ${appointment.time}
 
-👩 *Cliente:* ${a.clientName}
-📱 *Telefone:* ${a.clientPhone || 'não informado'}
-💅 *Serviço:* ${a.serviceName}
-📅 *Data:* ${fmtDate(a.date)}
-🕐 *Horário:* ${a.time}
+Acesse o painel para confirmar.`,
 
-_Acesse o painel para confirmar._`,
+  reminderOwner: appointment => `*Atendimento em 1 hora*
 
-  // Para o DONO — lembrete de atendimento próximo
-  reminderOwner: (a) => `📅 *Atendimento em 1 hora!*
-
-👩 *${a.clientName}*
-💅 *${a.serviceName}*
-🕐 *${a.time}*
-
-_Bom atendimento!_ 🌸`,
+*Cliente:* ${appointment.clientName}
+*Servico:* ${appointment.serviceName}
+*Horario:* ${appointment.time}`,
 };
-
-// ═══════════════════════════════════════════════════════════
-//  ENVIO POR PROVEDOR
-// ═══════════════════════════════════════════════════════════
 
 async function sendEvolution(toPhone, message) {
   const number = normalizePhone(toPhone);
-  const url    = `${process.env.EVOLUTION_API_URL}/message/sendText/${process.env.EVOLUTION_INSTANCE}`;
-
-  const { data } = await axios.post(url, {
-    number,
-    textMessage: { text: message },
-    options: { delay: 1000 },
-  }, {
-    headers: {
-      'apikey':        process.env.EVOLUTION_API_KEY,
-      'Content-Type':  'application/json',
-    },
-    timeout: 10000,
-  });
-
-  return data;
-}
-
-async function sendTwilio(toPhone, message) {
-  const number = '+' + normalizePhone(toPhone);
-  const { TWILIO_ACCOUNT_SID: sid, TWILIO_AUTH_TOKEN: token, TWILIO_WHATSAPP_FROM: from } = process.env;
+  const url = `${process.env.EVOLUTION_API_URL}/message/sendText/${process.env.EVOLUTION_INSTANCE}`;
 
   const { data } = await axios.post(
-    `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`,
-    new URLSearchParams({ From: from, To: `whatsapp:${number}`, Body: message }),
-    { auth: { username: sid, password: token }, timeout: 10000 }
+    url,
+    {
+      number,
+      textMessage: { text: message },
+      options: { delay: 1000 },
+    },
+    {
+      headers: {
+        apikey: process.env.EVOLUTION_API_KEY,
+        'Content-Type': 'application/json',
+      },
+      timeout: 10000,
+    },
   );
 
   return data;
 }
 
-// ── Função principal ─────────────────────────────────────────
+async function sendTwilio(toPhone, message) {
+  const number = `+${normalizePhone(toPhone)}`;
+  const {
+    TWILIO_ACCOUNT_SID: sid,
+    TWILIO_AUTH_TOKEN: token,
+    TWILIO_WHATSAPP_FROM: from,
+  } = process.env;
+
+  const { data } = await axios.post(
+    `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`,
+    new URLSearchParams({
+      From: from,
+      To: `whatsapp:${number}`,
+      Body: message,
+    }),
+    {
+      auth: { username: sid, password: token },
+      timeout: 10000,
+    },
+  );
+
+  return data;
+}
+
 async function sendWhatsApp(rawPhone, message) {
   const phone = normalizePhone(rawPhone);
 
   if (!phone) {
-    console.warn('⚠️  Número não informado — mensagem ignorada.');
+    console.warn('[whatsapp] number missing, message skipped.');
     return { skipped: true, reason: 'no_phone' };
   }
 
@@ -141,45 +136,34 @@ async function sendWhatsApp(rawPhone, message) {
       ? await sendTwilio(phone, message)
       : await sendEvolution(phone, message);
 
-    console.log(`✅ WhatsApp enviado → ${phone} (${PROVIDER})`);
+    console.log(`[whatsapp] sent to ${phone} via ${PROVIDER}`);
     return result;
-
-  } catch (err) {
-    const detail = err.response?.data || err.message;
-    console.error(`❌ Falha ao enviar para ${phone} via ${PROVIDER}:`, detail);
-    return { error: true, detail };  // não lança exceção — não quebra o fluxo
+  } catch (error) {
+    const detail = error.response?.data || error.message;
+    console.error(`[whatsapp] failed for ${phone} via ${PROVIDER}:`, detail);
+    return { error: true, detail };
   }
 }
 
-// ═══════════════════════════════════════════════════════════
-//  FUNÇÕES EXPORTADAS POR EVENTO
-// ═══════════════════════════════════════════════════════════
-
 module.exports = {
-
-  // Dono confirmou → avisa a cliente
-  async notifyConfirmation(appt) {
-    return sendWhatsApp(appt.clientPhone, MSG.confirmClient(appt));
+  async notifyConfirmation(appointment) {
+    return sendWhatsApp(appointment.clientPhone, MSG.confirmClient(appointment));
   },
 
-  // Cliente agendou → avisa o dono
-  async notifyOwnerNewBooking(appt) {
-    return sendWhatsApp(process.env.OWNER_WHATSAPP, MSG.newBookingOwner(appt));
+  async notifyOwnerNewBooking(appointment) {
+    return sendWhatsApp(process.env.OWNER_WHATSAPP, MSG.newBookingOwner(appointment));
   },
 
-  // Lembrete 1 dia antes → para a cliente
-  async notifyReminderDay(appt) {
-    return sendWhatsApp(appt.clientPhone, MSG.reminderDay(appt));
+  async notifyReminderDay(appointment) {
+    return sendWhatsApp(appointment.clientPhone, MSG.reminderDay(appointment));
   },
 
-  // Lembrete 1 hora antes → para a cliente
-  async notifyReminderHour(appt) {
-    return sendWhatsApp(appt.clientPhone, MSG.reminderHour(appt));
+  async notifyReminderHour(appointment) {
+    return sendWhatsApp(appointment.clientPhone, MSG.reminderHour(appointment));
   },
 
-  // Lembrete 1 hora antes → para o dono
-  async notifyOwnerReminder(appt) {
-    return sendWhatsApp(process.env.OWNER_WHATSAPP, MSG.reminderOwner(appt));
+  async notifyOwnerReminder(appointment) {
+    return sendWhatsApp(process.env.OWNER_WHATSAPP, MSG.reminderOwner(appointment));
   },
 
   sendWhatsApp,
